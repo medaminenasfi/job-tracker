@@ -1,23 +1,26 @@
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // CORS — allow web frontend and Chrome extension
+  app.use(cookieParser());
+
   app.enableCors({
     origin: [
       'http://localhost:3001',
+      'http://localhost:3000',
       /^chrome-extension:\/\//,
     ],
     credentials: true,
   });
 
-  // Global prefix
   app.setGlobalPrefix('api');
 
-  await app.listen(process.env.PORT ?? 3000);
-  console.log(`Backend running on http://localhost:${process.env.PORT ?? 3000}/api`);
+  const port = Number(process.env.PORT ?? 3000);
+  await app.listen(port, '0.0.0.0');
+  console.log(`Backend running on http://localhost:${port}/api`);
 }
 bootstrap();

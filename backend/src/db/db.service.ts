@@ -65,6 +65,16 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
 
       CREATE INDEX IF NOT EXISTS idx_jobs_user_id ON jobs(user_id);
       CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+
+      CREATE TABLE IF NOT EXISTS refresh_tokens (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id uuid REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+        token_hash text NOT NULL,
+        expires_at timestamptz NOT NULL,
+        created_at timestamptz DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+      CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash ON refresh_tokens(token_hash);
     `);
   }
 }

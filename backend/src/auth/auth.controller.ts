@@ -1,4 +1,5 @@
-import { Controller, Post, Body, Get, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Request, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
@@ -7,18 +8,28 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
-  register(@Body() body: any) {
-    return this.authService.register(body);
+  register(@Body() body: unknown, @Res({ passthrough: true }) res: Response) {
+    return this.authService.register(body, res);
   }
 
   @Post('login')
-  login(@Body() body: any) {
-    return this.authService.login(body);
+  login(@Body() body: unknown, @Res({ passthrough: true }) res: Response) {
+    return this.authService.login(body, res);
+  }
+
+  @Post('refresh')
+  refresh(@Request() req: { cookies?: { refreshToken?: string } }, @Res({ passthrough: true }) res: Response) {
+    return this.authService.refresh(req.cookies?.refreshToken, res);
+  }
+
+  @Post('logout')
+  logout(@Request() req: { cookies?: { refreshToken?: string } }, @Res({ passthrough: true }) res: Response) {
+    return this.authService.logout(req.cookies?.refreshToken, res);
   }
 
   @UseGuards(JwtAuthGuard)
   @Get('me')
-  getProfile(@Request() req: any) {
+  getProfile(@Request() req: { user: { id: string; name: string; email: string } }) {
     return req.user;
   }
 }

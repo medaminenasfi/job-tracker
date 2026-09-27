@@ -12,6 +12,11 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d jobtracker"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     restart: unless-stopped
 
   pgadmin:
@@ -37,8 +42,10 @@ services:
       - "3000:3000"
     command: sh -c "npm install && npm run start:dev"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     environment:
+      - PORT=3000
       - DATABASE_URL=postgresql://postgres:mysecretpassword@postgres:5432/jobtracker?schema=public
       - JWT_ACCESS_SECRET=super_secret_access_key_replace_in_prod
       - JWT_REFRESH_SECRET=super_secret_refresh_key_replace_in_prod
@@ -55,9 +62,9 @@ services:
       - /app/node_modules
     ports:
       - "3001:3000"
-    command: sh -c "npm install && npm run dev"
+    command: sh -c "npm install && npx next dev -H 0.0.0.0 -p 3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:3000
+      - API_PROXY_TARGET=http://backend:3000
     depends_on:
       - backend
     restart: unless-stopped
