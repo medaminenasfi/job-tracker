@@ -1,0 +1,70 @@
+import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Pool } from 'pg';
+
+@Injectable()
+export class DbService implements OnModuleInit, OnModuleDestroy {
+  private pool: Pool;
+
+  constructor() {
+    this.pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+    });
+  }
+
+  async onModuleInit() {
+    await this.pool.connect();
+    await this.initSchema();
+  }
+
+  async onModuleDestroy() {
+    await this.pool.end();
+  }
+
+  get query() {
+    return this.pool.query.bind(this.pool);
+  }
+
+  private async initSchema() {
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        name text NOT NULL,
+        email text UNIQUE NOT NULL,
+        password_hash text NOT NULL,
+        created_at timestamptz DEFAULT now()
+      );
+
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'job_status') THEN
+          CREATE TYPE job_status AS ENUM (
+            'SAVED', 'APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'REJECTED', 'WITHDRAWN'
+          );
+        END IF;
+      END
+      $$;
+
+      CREATE TABLE IF NOT EXISTS jobs (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id uuid REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+        title text NOT NULL,
+        company text NOT NULL,
+        location text,
+        url text,
+        source text,
+        description text,
+        salary text,
+        employment_type text,
+        status job_status NOT NULL DEFAULT 'SAVED',
+        notes text,
+        saved_at timestamptz DEFAULT now(),
+        applied_at timestamptz,
+        created_at timestamptz DEFAULT now(),
+        updated_at timestamptz DEFAULT now()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_jobs_user_id ON jobs(user_id);
+      CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+    `);
+  }
+}
