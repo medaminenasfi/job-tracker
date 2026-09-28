@@ -65,6 +65,7 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
 
       CREATE INDEX IF NOT EXISTS idx_jobs_user_id ON jobs(user_id);
       CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_user_url ON jobs(user_id, url) WHERE url IS NOT NULL;
 
       CREATE TABLE IF NOT EXISTS refresh_tokens (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

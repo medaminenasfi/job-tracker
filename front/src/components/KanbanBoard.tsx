@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCorners } from '@dnd-kit/core';
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCorners, useDroppable, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { apiFetch } from '@/lib/api';
@@ -9,6 +9,7 @@ import { Job, JobStatus } from '@/lib/types';
 import { JobCard } from './JobCard';
 import { AddJobModal } from './AddJobModal';
 import { JobDetailsModal } from './JobDetailsModal';
+import { Toast, useToast } from './Toast';
 import { useState } from 'react';
 
 const COLUMNS: JobStatus[] = ['SAVED', 'APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'REJECTED', 'WITHDRAWN'];
@@ -23,7 +24,7 @@ const COLUMN_COLORS: Record<JobStatus, string> = {
   WITHDRAWN: 'bg-gray-50 border-gray-200',
 };
 
-function SortableJobCard({ job, onClick }: { job: Job; onClick: (job: Job) => void }) {
+function SortableJobCard({ job, onViewDetails }: { job: Job; onViewDetails: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: job.id,
   });
@@ -35,24 +36,54 @@ function SortableJobCard({ job, onClick }: { job: Job; onClick: (job: Job) => vo
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      <div onClick={() => onClick(job)} className="cursor-pointer">
-        <JobCard job={job} />
-      </div>
+    <div 
+      ref={setNodeRef} 
+      style={style} 
+      {...attributes}
+      {...listeners}
+      className="cursor-grab active:cursor-grabbing"
+    >
+      <JobCard job={job} onViewDetails={onViewDetails} />
+    </div>
+  );
+}
+
+function DroppableColumn({ status, children, className }: { status: JobStatus; children: React.ReactNode; className: string }) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: status,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      id={`column-${status}`}
+      className={`${className} ${isOver ? 'ring-2 ring-black' : ''}`}
+    >
+      {children}
     </div>
   );
 }
 
 export function KanbanBoard() {
   const queryClient = useQueryClient();
+  const { toast, showToast, hideToast } = useToast();
   const [activeJob, setActiveJob] = useState<Job | null>(null);
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<JobStatus | 'ALL'>('ALL');
   const [sourceFilter, setSourceFilter] = useState<string>('ALL');
+  const [dateFilter, setDateFilter] = useState<'ALL' | '7days' | '30days' | '90days'>('ALL');
 
-  const { data: jobs = [], isLoading } = useQuery({
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
+
+  const { data: jobs = [], isLoading, isError } = useQuery({
     queryKey: ['jobs'],
     queryFn: async () => {
       const res = await apiFetch('/api/jobs');
@@ -70,7 +101,24 @@ export function KanbanBoard() {
       if (!res.ok) throw new Error('Failed to update status');
       return res.json() as Promise<Job>;
     },
-    onSuccess: () => {
+    onMutate: async ({ jobId, status }) => {
+      await queryClient.cancelQueries({ queryKey: ['jobs'] });
+      
+      const previousJobs = queryClient.getQueryData(['jobs']) as Job[];
+      
+      queryClient.setQueryData(['jobs'], (old: Job[] = []) =>
+        old.map((job) => (job.id === jobId ? { ...job, status } : job))
+      );
+      
+      return { previousJobs };
+    },
+    onError: (error, variables, context) => {
+      if (context?.previousJobs) {
+        queryClient.setQueryData(['jobs'], context.previousJobs);
+      }
+      showToast('Failed to update status', 'error');
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['jobs'] });
     },
   });
@@ -108,6 +156,14 @@ export function KanbanBoard() {
     return <div className="text-gray-500">Loading jobs...</div>;
   }
 
+  if (isError) {
+    return (
+      <div className="text-red-600" role="alert">
+        Failed to load jobs. Check your connection and try again.
+      </div>
+    );
+  }
+
   const filteredJobs = jobs.filter((job) => {
     const matchesSearch =
       searchQuery === '' ||
@@ -118,7 +174,22 @@ export function KanbanBoard() {
     const matchesStatus = statusFilter === 'ALL' || job.status === statusFilter;
     const matchesSource = sourceFilter === 'ALL' || job.source === sourceFilter;
     
-    return matchesSearch && matchesStatus && matchesSource;
+    let matchesDate = true;
+    if (dateFilter !== 'ALL' && job.saved_at) {
+      const jobDate = new Date(job.saved_at);
+      const now = new Date();
+      const daysDiff = Math.floor((now.getTime() - jobDate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (dateFilter === '7days') {
+        matchesDate = daysDiff <= 7;
+      } else if (dateFilter === '30days') {
+        matchesDate = daysDiff <= 30;
+      } else if (dateFilter === '90days') {
+        matchesDate = daysDiff <= 90;
+      }
+    }
+    
+    return matchesSearch && matchesStatus && matchesSource && matchesDate;
   });
 
   const jobsByColumn = COLUMNS.reduce((acc, status) => {
@@ -195,14 +266,32 @@ export function KanbanBoard() {
           <option value="manual">Manual</option>
           <option value="generic">Generic</option>
         </select>
+        <select
+          value={dateFilter}
+          onChange={(e) => setDateFilter(e.target.value as 'ALL' | '7days' | '30days' | '90days')}
+          className="border border-gray-300 rounded-lg px-4 py-2 text-black focus:outline-none focus:border-black"
+        >
+          <option value="ALL">All Time</option>
+          <option value="7days">Last 7 days</option>
+          <option value="30days">Last 30 days</option>
+          <option value="90days">Last 90 days</option>
+        </select>
       </div>
 
-      <DndContext collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      {filteredJobs.length === 0 && (
+        <div className="mb-4 text-sm text-gray-500">
+          {jobs.length === 0
+            ? 'No jobs yet — click "+ Add Job" to get started.'
+            : 'No jobs match your search or filters.'}
+        </div>
+      )}
+
+      <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <div className="flex gap-4 overflow-x-auto pb-4">
           {COLUMNS.map((status) => (
-            <div
+            <DroppableColumn
               key={status}
-              id={`column-${status}`}
+              status={status}
               className={`flex-shrink-0 w-72 ${COLUMN_COLORS[status]} border rounded-lg p-3`}
             >
               <div className="flex items-center justify-between mb-3">
@@ -214,11 +303,15 @@ export function KanbanBoard() {
               <SortableContext items={jobsByColumn[status].map((j) => j.id)}>
                 <div className="space-y-2 min-h-[100px]">
                   {jobsByColumn[status].map((job) => (
-                    <SortableJobCard key={job.id} job={job} onClick={setSelectedJob} />
+                    <SortableJobCard 
+                      key={job.id} 
+                      job={job} 
+                      onViewDetails={() => setSelectedJob(job)} 
+                    />
                   ))}
                 </div>
               </SortableContext>
-            </div>
+            </DroppableColumn>
           ))}
         </div>
 
@@ -233,6 +326,7 @@ export function KanbanBoard() {
         isOpen={!!selectedJob} 
         onClose={() => setSelectedJob(null)} 
       />
+      {toast && <Toast message={toast.message} type={toast.type} onClose={hideToast} />}
     </div>
   );
 }

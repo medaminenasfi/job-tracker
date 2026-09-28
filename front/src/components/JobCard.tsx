@@ -4,11 +4,12 @@ import { Job } from '@/lib/types';
 
 interface JobCardProps {
   job: Job;
+  onViewDetails?: () => void;
 }
 
-export function JobCard({ job }: JobCardProps) {
+export function JobCard({ job, onViewDetails }: JobCardProps) {
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing">
+    <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
       <h3 className="font-semibold text-black mb-1">{job.title}</h3>
       <p className="text-sm text-gray-600 mb-2">{job.company}</p>
       
@@ -27,6 +28,18 @@ export function JobCard({ job }: JobCardProps) {
         <div className="text-xs text-gray-500">
           Applied: {new Date(job.applied_at).toLocaleDateString()}
         </div>
+      )}
+
+      {onViewDetails && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onViewDetails();
+          }}
+          className="mt-2 text-xs text-blue-600 hover:text-blue-700"
+        >
+          View Details
+        </button>
       )}
     </div>
   );

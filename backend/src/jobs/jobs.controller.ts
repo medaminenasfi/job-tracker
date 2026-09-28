@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Param, Patch, Delete, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Patch, Delete, UseGuards, Request, Query } from '@nestjs/common';
 import { JobsService } from './jobs.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
@@ -13,8 +13,8 @@ export class JobsController {
   }
 
   @Get()
-  findAll(@Request() req: any) {
-    return this.jobsService.findAll(req.user.id);
+  findAll(@Request() req: any, @Query() query: any) {
+    return this.jobsService.findAll(req.user.id, query);
   }
 
   @Get(':id')
