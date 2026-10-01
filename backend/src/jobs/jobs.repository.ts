@@ -139,9 +139,10 @@ export class JobsRepository {
   }
 
   async delete(userId: string, jobId: string) {
-    await this.db.query('DELETE FROM jobs WHERE user_id = $1 AND id = $2', [
-      userId,
-      jobId,
-    ]);
+    const result = await this.db.query(
+      'DELETE FROM jobs WHERE user_id = $1 AND id = $2',
+      [userId, jobId],
+    );
+    return (result.rowCount ?? 0) > 0;
   }
 }

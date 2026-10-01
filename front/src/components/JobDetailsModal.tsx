@@ -1,9 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiFetch } from '@/lib/api';
-import { Job, JobStatus } from '@/lib/types';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+import { apiFetch, apiJson } from '@/lib/api';
+import { Job, JobNote, JobStatus } from '@/lib/types';
 
 interface JobDetailsModalProps {
   job: Job | null;
@@ -13,22 +17,40 @@ interface JobDetailsModalProps {
 
 export function JobDetailsModal({ job, isOpen, onClose }: JobDetailsModalProps) {
   const queryClient = useQueryClient();
-  const [notes, setNotes] = useState(job?.notes || '');
   const [status, setStatus] = useState<JobStatus>(job?.status || 'SAVED');
   const [noteMsg, setNoteMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Multiple-notes manager state. `newNote` backs the add box; `editingId` /
+  // `editBody` back inline editing of one existing note at a time.
+  const [newNote, setNewNote] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editBody, setEditBody] = useState('');
+
+  const jobId = job?.id;
 
   // The modal stays mounted while `job` swaps between cards, so re-sync the local
   // editors whenever a different job is opened. Without this, opening job B showed
   // job A's note/status and saving would overwrite the wrong record.
   useEffect(() => {
-    setNotes(job?.notes || '');
     setStatus(job?.status || 'SAVED');
     setNoteMsg(null);
-  }, [job?.id, job?.notes, job?.status]);
+    setNewNote('');
+    setEditingId(null);
+    setEditBody('');
+  }, [job?.id, job?.status]);
+
+  const notesQuery = useQuery({
+    queryKey: ['jobNotes', jobId],
+    queryFn: () => apiJson<JobNote[]>(`/api/jobs/${jobId}/notes`),
+    enabled: !!jobId,
+  });
+
+  const invalidateNotes = () =>
+    queryClient.invalidateQueries({ queryKey: ['jobNotes', jobId] });
 
   const updateJobMutation = useMutation({
-    mutationFn: async (data: { notes?: string; status?: JobStatus }) => {
-      const res = await apiFetch(`/api/jobs/${job?.id}`, {
+    mutationFn: async (data: { status?: JobStatus }) => {
+      const res = await apiFetch(`/api/jobs/${jobId}`, {
         method: 'PATCH',
         body: JSON.stringify(data),
       });
@@ -42,7 +64,7 @@ export function JobDetailsModal({ job, isOpen, onClose }: JobDetailsModalProps) 
 
   const deleteJobMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiFetch(`/api/jobs/${job?.id}`, {
+      const res = await apiFetch(`/api/jobs/${jobId}`, {
         method: 'DELETE',
       });
       if (!res.ok) throw new Error('Failed to delete job');
@@ -53,29 +75,67 @@ export function JobDetailsModal({ job, isOpen, onClose }: JobDetailsModalProps) 
     },
   });
 
-  const handleSaveNotes = () => {
+  const createNoteMutation = useMutation({
+    mutationFn: (body: string) =>
+      apiJson<JobNote>(`/api/jobs/${jobId}/notes`, {
+        method: 'POST',
+        body: JSON.stringify({ body }),
+      }),
+    onSuccess: () => {
+      setNewNote('');
+      setNoteMsg({ type: 'success', text: 'Note added' });
+      invalidateNotes();
+    },
+    onError: () => setNoteMsg({ type: 'error', text: 'Failed to add note' }),
+  });
+
+  const updateNoteMutation = useMutation({
+    mutationFn: ({ noteId, body }: { noteId: string; body: string }) =>
+      apiJson<JobNote>(`/api/jobs/${jobId}/notes/${noteId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ body }),
+      }),
+    onSuccess: () => {
+      setEditingId(null);
+      setEditBody('');
+      setNoteMsg({ type: 'success', text: 'Note updated' });
+      invalidateNotes();
+    },
+    onError: () => setNoteMsg({ type: 'error', text: 'Failed to update note' }),
+  });
+
+  const deleteNoteMutation = useMutation({
+    mutationFn: (noteId: string) =>
+      apiFetch(`/api/jobs/${jobId}/notes/${noteId}`, { method: 'DELETE' }),
+    onSuccess: (res) => {
+      if (!res.ok) {
+        setNoteMsg({ type: 'error', text: 'Failed to delete note' });
+        return;
+      }
+      if (editingId) setEditingId(null);
+      setNoteMsg({ type: 'success', text: 'Note deleted' });
+      invalidateNotes();
+    },
+    onError: () => setNoteMsg({ type: 'error', text: 'Failed to delete note' }),
+  });
+
+  const busy =
+    createNoteMutation.isPending ||
+    updateNoteMutation.isPending ||
+    deleteNoteMutation.isPending;
+
+  const handleAddNote = () => {
+    const body = newNote.trim();
+    if (!body) return;
     setNoteMsg(null);
-    updateJobMutation.mutate(
-      { notes },
-      {
-        onSuccess: () =>
-          setNoteMsg({ type: 'success', text: notes.trim() ? 'Notes saved' : 'Note deleted' }),
-        onError: () => setNoteMsg({ type: 'error', text: 'Failed to save notes' }),
-      },
-    );
+    createNoteMutation.mutate(body);
   };
 
-  // Explicit delete: clear the textarea and persist an empty note (stored as NULL).
-  const handleClearNotes = () => {
-    setNotes('');
+  const handleSaveEdit = (noteId: string) => {
+    const body = editBody.trim();
+    if (!body) return;
     setNoteMsg(null);
-    updateJobMutation.mutate(
-      { notes: '' },
-      {
-        onSuccess: () => setNoteMsg({ type: 'success', text: 'Note deleted' }),
-        onError: () => setNoteMsg({ type: 'error', text: 'Failed to delete note' }),
-      },
-    );
+    updateNoteMutation.mutate({ noteId, body });
   };
 
   const handleStatusChange = (newStatus: JobStatus) => {
@@ -90,6 +150,8 @@ export function JobDetailsModal({ job, isOpen, onClose }: JobDetailsModalProps) 
   };
 
   if (!isOpen || !job) return null;
+
+  const notes = notesQuery.data ?? [];
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -155,30 +217,97 @@ export function JobDetailsModal({ job, isOpen, onClose }: JobDetailsModalProps) 
 
           <div>
             <label className="block text-sm font-medium text-gray-500 mb-1">Notes</label>
+
+            {/* Existing notes — each independently editable/deletable. */}
+            <div className="space-y-2 mb-3">
+              {notesQuery.isLoading && (
+                <p className="text-sm text-gray-500">Loading notes...</p>
+              )}
+              {notesQuery.isError && (
+                <p className="text-sm text-red-600">Failed to load notes.</p>
+              )}
+              {!notesQuery.isLoading && notes.length === 0 && (
+                <p className="text-sm text-gray-400">No notes yet.</p>
+              )}
+              {notes.map((note) => (
+                <div
+                  key={note.id}
+                  className="border border-gray-200 rounded-lg p-3 bg-gray-50"
+                >
+                  {editingId === note.id ? (
+                    <div>
+                      <textarea
+                        value={editBody}
+                        onChange={(e) => setEditBody(e.target.value)}
+                        rows={3}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-black text-sm focus:outline-none focus:border-black"
+                      />
+                      <div className="mt-2 flex items-center gap-2">
+                        <button
+                          onClick={() => handleSaveEdit(note.id)}
+                          disabled={busy || editBody.trim() === ''}
+                          className="px-3 py-1.5 bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 transition-colors text-sm"
+                        >
+                          {updateNoteMutation.isPending ? 'Saving...' : 'Save'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingId(null);
+                            setEditBody('');
+                          }}
+                          disabled={busy}
+                          className="px-3 py-1.5 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50 transition-colors text-sm"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between items-start gap-3">
+                      <p className="text-sm text-black whitespace-pre-wrap break-words flex-1">
+                        {note.body}
+                      </p>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => {
+                            setEditingId(note.id);
+                            setEditBody(note.body);
+                          }}
+                          disabled={busy}
+                          className="text-sm text-blue-600 hover:text-blue-800 disabled:opacity-50"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => deleteNoteMutation.mutate(note.id)}
+                          disabled={busy}
+                          className="text-sm text-red-600 hover:text-red-800 disabled:opacity-50"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Add a new note. */}
             <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              value={newNote}
+              onChange={(e) => setNewNote(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-4 py-2 text-black focus:outline-none focus:border-black"
-              rows={4}
-              placeholder="Add your notes..."
+              rows={3}
+              placeholder="Add a note..."
             />
             <div className="mt-2 flex items-center gap-2">
               <button
-                onClick={handleSaveNotes}
-                disabled={updateJobMutation.isPending}
+                onClick={handleAddNote}
+                disabled={busy || newNote.trim() === ''}
                 className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 transition-colors text-sm"
               >
-                {updateJobMutation.isPending ? 'Saving...' : 'Save Notes'}
+                {createNoteMutation.isPending ? 'Adding...' : 'Add Note'}
               </button>
-              {(notes.trim() !== '' || (job?.notes ?? '') !== '') && (
-                <button
-                  onClick={handleClearNotes}
-                  disabled={updateJobMutation.isPending}
-                  className="px-4 py-2 bg-white text-red-600 border border-red-300 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors text-sm"
-                >
-                  Delete Note
-                </button>
-              )}
             </div>
             {noteMsg && (
               <p

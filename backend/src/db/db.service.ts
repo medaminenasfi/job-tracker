@@ -67,6 +67,36 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
       CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_user_url ON jobs(user_id, url) WHERE url IS NOT NULL;
 
+      -- Multiple managed notes per job. Each note belongs to both a job and its
+      -- user (denormalized user_id so ownership checks never need a join and
+      -- rows cannot be orphaned if a job is deleted).
+      CREATE TABLE IF NOT EXISTS job_notes (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        job_id uuid REFERENCES jobs(id) ON DELETE CASCADE NOT NULL,
+        user_id uuid REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+        body text NOT NULL,
+        created_at timestamptz DEFAULT now(),
+        updated_at timestamptz DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_job_notes_job_id ON job_notes(job_id);
+      CREATE INDEX IF NOT EXISTS idx_job_notes_user_id ON job_notes(user_id);
+
+      -- One-time backfill: fold each legacy single jobs.notes value into job_notes
+      -- so notes saved before the multi-note manager still show up in it. The
+      -- NOT EXISTS guard makes this idempotent (a no-op once migrated), and the
+      -- follow-up UPDATE clears the legacy column only where a row was copied.
+      INSERT INTO job_notes (job_id, user_id, body)
+      SELECT j.id, j.user_id, trim(j.notes)
+        FROM jobs j
+       WHERE j.notes IS NOT NULL
+         AND trim(j.notes) <> ''
+         AND NOT EXISTS (SELECT 1 FROM job_notes n WHERE n.job_id = j.id);
+
+      UPDATE jobs SET notes = NULL
+       WHERE notes IS NOT NULL
+         AND trim(notes) <> ''
+         AND EXISTS (SELECT 1 FROM job_notes n WHERE n.job_id = jobs.id);
+
       CREATE TABLE IF NOT EXISTS refresh_tokens (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id uuid REFERENCES users(id) ON DELETE CASCADE NOT NULL,

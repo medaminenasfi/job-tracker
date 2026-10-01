@@ -152,14 +152,35 @@ function Popup() {
   return (
     <div className="popup">
       <div className="header">
-        <div className="header-title">
-          <h2>Job Tracker</h2>
-          {token && user && <p className="user-name">Signed in as {user.name}</p>}
-        </div>
-        {token && (
-          <button onClick={handleLogout} className="btn-logout" title="Sign out">
-            Log out
-          </button>
+        <h2>Job Tracker</h2>
+        {token && user && (
+          <div className="user-chip">
+            <span className="user-chip-name" title={user.name}>
+              {user.name}
+            </span>
+            <button
+              onClick={handleLogout}
+              className="btn-logout-icon"
+              title="Sign out"
+              aria-label="Sign out"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+            </button>
+          </div>
         )}
       </div>
 
@@ -199,16 +220,6 @@ function Popup() {
               value={jobData.location || ''}
               onChange={(e) => setJobData({ ...jobData, location: e.target.value })}
               placeholder="Location"
-            />
-          </div>
-
-          <div className="form-group">
-            <label>Salary</label>
-            <input
-              type="text"
-              value={jobData.salary || ''}
-              onChange={(e) => setJobData({ ...jobData, salary: e.target.value })}
-              placeholder="Salary"
             />
           </div>
 

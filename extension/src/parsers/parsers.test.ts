@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractJobData, parseGeneric } from './index';
+import { extractJobData, parseGeneric, parseRippling } from './index';
 import { parseLinkedIn } from './linkedin';
 import { parseIndeed } from './indeed';
 
@@ -28,6 +28,42 @@ describe('parseLinkedIn', () => {
     const result = parseLinkedIn(d);
     expect(result.source).toBe('linkedin');
     expect(result.title).toBeUndefined();
+  });
+
+  it('falls back to class-substring matching inside the top card', () => {
+    // LinkedIn rotates BEM suffixes; the stable substrings still resolve.
+    const d = doc(`
+      <div class="job-details-jobs-unified-top-card">
+        <span class="new-layout__job-title-x">Staff Engineer</span>
+        <a class="new-layout__company-name-x">Acme</a>
+        <span class="new-layout__location-x">Remote</span>
+      </div>
+    `);
+    const result = parseLinkedIn(d);
+    expect(result.title).toBe('Staff Engineer');
+    expect(result.company).toBe('Acme');
+    expect(result.location).toBe('Remote');
+  });
+});
+
+describe('parseRippling', () => {
+  it('reads employer and work location from the embedded flight JSON', () => {
+    const d = doc(`
+      <h2 class="css-of4wst">Frontend Developer</h2>
+      <script>{"companyName":"Web Hosting Canada","workLocations":["Hybrid (Tunis, TN)"]}</script>
+    `);
+    const result = parseRippling(d);
+    expect(result.title).toBe('Frontend Developer');
+    expect(result.company).toBe('Web Hosting Canada');
+    expect(result.location).toBe('Hybrid (Tunis, TN)');
+  });
+
+  it('returns undefined fields when the payload is absent', () => {
+    const d = doc('<h2>Some heading</h2>');
+    const result = parseRippling(d);
+    expect(result.title).toBe('Some heading');
+    expect(result.company).toBeUndefined();
+    expect(result.location).toBeUndefined();
   });
 });
 
@@ -110,6 +146,41 @@ describe('parseGeneric', () => {
     const d = doc('');
     expect(parseGeneric(d)).toEqual({ source: 'generic', title: undefined, description: undefined });
   });
+
+  it('fills title and location from the page but never company from og:site_name', () => {
+    const d = doc(`
+      <meta property="og:site_name" content="Rippling Recruiting">
+      <h1>Frontend Developer</h1>
+      <span class="job-location">Montréal, QC</span>
+    `);
+    const result = parseGeneric(d);
+    expect(result.title).toBe('Frontend Developer');
+    expect(result.location).toBe('Montréal, QC');
+    // og:site_name is the ATS/platform brand, not the employer — using it writes
+    // the wrong company, so it must never populate company.
+    expect(result.company).toBeUndefined();
+  });
+
+  it('prefers a clean h1 over the noisier og:title', () => {
+    const d = doc(`
+      <meta property="og:title" content="Frontend Developer | Current Openings">
+      <h1>Frontend Developer</h1>
+    `);
+    expect(parseGeneric(d).title).toBe('Frontend Developer');
+  });
+
+  it('resolves a JobPosting nested inside an ItemList', () => {
+    const d = doc(`
+      <script type="application/ld+json">
+      { "@type": "ItemList", "itemListElement": [
+        { "@type": "ListItem", "item": { "@type": "JobPosting", "title": "PM", "hiringOrganization": [{ "name": "CorpA" }] } }
+      ]}
+      </script>
+    `);
+    const result = parseGeneric(d);
+    expect(result.title).toBe('PM');
+    expect(result.company).toBe('CorpA');
+  });
 });
 
 describe('extractJobData', () => {
@@ -128,5 +199,34 @@ describe('extractJobData', () => {
     const d = doc('<title>Some Job</title>');
     expect(extractJobData(d, 'https://example.com/job/1').source).toBe('generic');
     expect(extractJobData(d, 'not-a-url').source).toBe('generic');
+  });
+
+  it('fills fields the site parser missed from the JSON-LD base', () => {
+    // A LinkedIn page whose DOM selectors we don't match, but with JSON-LD data.
+    const d = doc(`
+      <script type="application/ld+json">
+      { "@type": "JobPosting", "title": "Data Analyst", "description": "Crunch numbers",
+        "hiringOrganization": { "name": "DataCo" } }
+      </script>
+    `);
+    const job = extractJobData(d, 'https://www.linkedin.com/jobs/view/999');
+    expect(job).toMatchObject({
+      source: 'linkedin',
+      title: 'Data Analyst',
+      company: 'DataCo',
+      description: 'Crunch numbers',
+    });
+  });
+
+  it('lets a site-specific selector override the JSON-LD base', () => {
+    const d = doc(`
+      <script type="application/ld+json">
+      { "@type": "JobPosting", "title": "Wrong Title" }
+      </script>
+      <h1 class="top-card-layout__title">Right Title</h1>
+    `);
+    const job = extractJobData(d, 'https://www.linkedin.com/jobs/view/1');
+    expect(job.title).toBe('Right Title');
+    expect(job.source).toBe('linkedin');
   });
 });

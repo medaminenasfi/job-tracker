@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { saveJob, fetchJobs, markJobApplied, findJobByUrl, fetchMe } from './api';
+import { saveJob, fetchJobs, markJobApplied, findJobByUrl, fetchMe, createNote } from './api';
 import { API_BASE } from './config';
 import type { SavedJob, User } from './types';
 
@@ -123,6 +123,45 @@ describe('markJobApplied', () => {
     vi.stubGlobal('fetch', fetchMock);
     expect(await markJobApplied('', 'token')).toEqual({ success: false, error: 'No job selected' });
     expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('createNote', () => {
+  it('POSTs the note to the job notes endpoint with the bearer token', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => ({ id: 'n1', job_id: 'j1', body: 'Referred by Sam' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await createNote('j1', 'Referred by Sam', 'token-1');
+
+    expect(result.success).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(`${API_BASE}/jobs/j1/notes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer token-1' },
+      body: JSON.stringify({ body: 'Referred by Sam' }),
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it('rejects an empty note without calling the API', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await createNote('j1', '   ', 'token')).toEqual({
+      success: false,
+      error: 'A note needs a job and some text',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it('surfaces a 401 as an expired session', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({}) }));
+    const result = await createNote('j1', 'note', 'bad');
+    expect(result.error).toBe('Session expired — please log in again');
     vi.unstubAllGlobals();
   });
 });

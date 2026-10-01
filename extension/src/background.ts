@@ -1,5 +1,5 @@
-import { saveJob, fetchJobs, markJobApplied, findJobByUrl, fetchMe } from './api';
-import type { ApiResult, JobData } from './types';
+import { saveJob, fetchJobs, markJobApplied, findJobByUrl, fetchMe, createNote } from './api';
+import type { ApiResult, JobData, SavedJob } from './types';
 import type { RuntimeMessage } from './messages';
 
 function getToken(): Promise<string | null> {
@@ -32,6 +32,26 @@ async function handleApplicationDetected(url?: string): Promise<ApiResult> {
   });
 }
 
+// Save the job, then attach the optional note as the job's first managed note.
+// The note is stripped from the create payload so it lives only in job_notes (the
+// same store the dashboard manages) rather than the legacy jobs.notes column.
+// A note failure never fails the save — the job is already persisted.
+async function handleSaveJob(job: JobData, token: string): Promise<ApiResult> {
+  const { notes, ...jobWithoutNotes } = job;
+  const saved = await saveJob(jobWithoutNotes, token);
+  if (!saved.success || !saved.data) return saved;
+
+  const body = notes?.trim();
+  const jobId = (saved.data as SavedJob).id;
+  if (body && jobId) {
+    const noteResult = await createNote(jobId, body, token);
+    if (!noteResult.success) {
+      console.warn('Job saved but note failed:', noteResult.error);
+    }
+  }
+  return saved;
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   console.log('Job Tracker extension installed');
 });
@@ -58,7 +78,7 @@ chrome.runtime.onMessage.addListener(
         return true;
 
       case 'SAVE_JOB':
-        withToken((token) => saveJob(request.job as JobData, token)).then(sendResponse);
+        withToken((token) => handleSaveJob(request.job as JobData, token)).then(sendResponse);
         return true;
 
       case 'GET_JOBS':

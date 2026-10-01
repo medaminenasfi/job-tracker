@@ -46,6 +46,16 @@ export interface AuthResponse {
   refreshToken: string;
 }
 
+// A single managed note attached to a job. Multiple notes per job live in the
+// job_notes table; this mirrors the backend row shape.
+export interface JobNote {
+  id: string;
+  job_id: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
+}
+
 // ---- Admin area (Phase 7) ----
 
 export interface AdminUserRow {

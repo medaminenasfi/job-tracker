@@ -1,4 +1,4 @@
-import { BadRequestException, Logger } from '@nestjs/common';
+import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import { JobsService } from './jobs.service';
 import { JobsRepository } from './jobs.repository';
 
@@ -18,7 +18,7 @@ describe('JobsService', () => {
       findOne: jest.fn().mockResolvedValue({ id: 'job-1' }),
       update: jest.fn().mockResolvedValue({ id: 'job-1' }),
       updateStatus: jest.fn().mockResolvedValue({ id: 'job-1' }),
-      delete: jest.fn().mockResolvedValue(undefined),
+      delete: jest.fn().mockResolvedValue(true),
     };
     service = new JobsService(repo as unknown as JobsRepository);
   });
@@ -95,17 +95,54 @@ describe('JobsService', () => {
     warn.mockRestore();
   });
 
-  it('rejects an invalid status without touching the repository', () => {
-    expect(() => service.updateStatus('user-A', 'job-1', 'HIRED')).toThrow(
-      BadRequestException,
-    );
+  it('rejects an invalid status without touching the repository', async () => {
+    await expect(
+      service.updateStatus('user-A', 'job-1', 'HIRED'),
+    ).rejects.toThrow(BadRequestException);
     expect(repo.updateStatus).not.toHaveBeenCalled();
   });
 
-  it('rejects an invalid update payload', () => {
-    expect(() => service.update('user-A', 'job-1', { status: 'NOPE' })).toThrow(
-      BadRequestException,
-    );
+  it('rejects an invalid update payload', async () => {
+    await expect(
+      service.update('user-A', 'job-1', { status: 'NOPE' }),
+    ).rejects.toThrow(BadRequestException);
     expect(repo.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('JobsService missing/foreign job handling', () => {
+  let repo: jest.Mocked<
+    Pick<
+      JobsRepository,
+      'create' | 'findAll' | 'findOne' | 'update' | 'updateStatus' | 'delete'
+    >
+  >;
+  let service: JobsService;
+
+  beforeEach(() => {
+    repo = {
+      create: jest.fn(),
+      findAll: jest.fn(),
+      findOne: jest.fn().mockResolvedValue(undefined),
+      update: jest.fn().mockResolvedValue(undefined),
+      updateStatus: jest.fn().mockResolvedValue(undefined),
+      delete: jest.fn().mockResolvedValue(false),
+    };
+    service = new JobsService(repo as unknown as JobsRepository);
+  });
+
+  it('throws NotFound (not an empty 200) when the job is missing or foreign', async () => {
+    await expect(service.findOne('user-B', 'job-1')).rejects.toThrow(
+      NotFoundException,
+    );
+    await expect(
+      service.update('user-B', 'job-1', { notes: 'x' }),
+    ).rejects.toThrow(NotFoundException);
+    await expect(
+      service.updateStatus('user-B', 'job-1', 'APPLIED'),
+    ).rejects.toThrow(NotFoundException);
+    await expect(service.remove('user-B', 'job-1')).rejects.toThrow(
+      NotFoundException,
+    );
   });
 });

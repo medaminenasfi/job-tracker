@@ -53,6 +53,36 @@ export async function fetchJobs(token: string): Promise<ApiResult<SavedJob[]>> {
   }
 }
 
+// Attaches a note to an already-saved job. The extension saves the job first,
+// then posts the note here so it lands in the same job_notes store the dashboard
+// manages (one notes system, not a separate jobs.notes column).
+export async function createNote(
+  jobId: string,
+  body: string,
+  token: string,
+): Promise<ApiResult> {
+  if (!jobId || !body.trim()) {
+    return { success: false, error: 'A note needs a job and some text' };
+  }
+  try {
+    const response = await fetch(
+      `${API_BASE}/jobs/${encodeURIComponent(jobId)}/notes`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ body }),
+      },
+    );
+    if (!response.ok) return errorResult(response.status, 'Failed to save note');
+    return { success: true, data: await response.json() };
+  } catch {
+    return { success: false, error: 'Cannot reach the Job Tracker API' };
+  }
+}
+
 export async function markJobApplied(jobId: string, token: string): Promise<ApiResult<SavedJob>> {
   if (!jobId) return { success: false, error: 'No job selected' };
   try {

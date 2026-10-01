@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { JobsRepository } from './jobs.repository';
 import {
   createJobSchema,
@@ -38,29 +43,40 @@ export class JobsService {
     return this.jobsRepository.findAll(userId, parsed.data);
   }
 
-  findOne(userId: string, jobId: string) {
-    return this.jobsRepository.findOne(userId, jobId);
+  async findOne(userId: string, jobId: string) {
+    const job = await this.jobsRepository.findOne(userId, jobId);
+    if (!job) throw new NotFoundException('Job not found');
+    return job;
   }
 
-  update(userId: string, jobId: string, data: unknown) {
+  async update(userId: string, jobId: string, data: unknown) {
     const parsed = updateJobSchema.safeParse(data);
     if (!parsed.success) {
       throw new BadRequestException(
         parsed.error.issues[0]?.message ?? 'Invalid input',
       );
     }
-    return this.jobsRepository.update(userId, jobId, parsed.data);
+    const job = await this.jobsRepository.update(userId, jobId, parsed.data);
+    if (!job) throw new NotFoundException('Job not found');
+    return job;
   }
 
-  updateStatus(userId: string, jobId: string, status: unknown) {
+  async updateStatus(userId: string, jobId: string, status: unknown) {
     const parsed = jobStatusSchema.safeParse(status);
     if (!parsed.success) {
       throw new BadRequestException('Invalid status');
     }
-    return this.jobsRepository.updateStatus(userId, jobId, parsed.data);
+    const job = await this.jobsRepository.updateStatus(
+      userId,
+      jobId,
+      parsed.data,
+    );
+    if (!job) throw new NotFoundException('Job not found');
+    return job;
   }
 
-  remove(userId: string, jobId: string) {
-    return this.jobsRepository.delete(userId, jobId);
+  async remove(userId: string, jobId: string) {
+    const deleted = await this.jobsRepository.delete(userId, jobId);
+    if (!deleted) throw new NotFoundException('Job not found');
   }
 }
