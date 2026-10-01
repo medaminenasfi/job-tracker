@@ -17,13 +17,7 @@ describe('JobsRepository.update', () => {
     const [sql, values] = query.mock.calls[0];
     // 2 fields + updated_at = $1..$3, then user_id=$4, id=$5
     expect(sql).toContain('WHERE user_id = $4 AND id = $5');
-    expect(values).toEqual([
-      'Eng',
-      'hi',
-      expect.any(Date),
-      'user-1',
-      'job-1',
-    ]);
+    expect(values).toEqual(['Eng', 'hi', expect.any(Date), 'user-1', 'job-1']);
   });
 
   it('never interpolates non-whitelisted or malicious keys into SQL', async () => {
@@ -53,6 +47,16 @@ describe('JobsRepository.update', () => {
     const [sql] = query.mock.calls[0];
     expect(sql).toContain('SELECT * FROM jobs WHERE user_id = $1 AND id = $2');
   });
+
+  it('normalizes an empty url to null on update', async () => {
+    query.mockResolvedValue({ rows: [{ id: 'job-1' }] });
+
+    await repo.update('user-1', 'job-1', { url: '  ' });
+
+    const [sql, values] = query.mock.calls[0];
+    expect(sql).toContain('SET url = $1');
+    expect(values[0]).toBeNull();
+  });
 });
 
 describe('JobsRepository.create', () => {
@@ -65,7 +69,11 @@ describe('JobsRepository.create', () => {
   });
 
   it('is idempotent on (user_id, url) to prevent duplicate saves', async () => {
-    await repo.create('user-1', { title: 'Eng', company: 'Acme', url: 'https://s/1' });
+    await repo.create('user-1', {
+      title: 'Eng',
+      company: 'Acme',
+      url: 'https://s/1',
+    });
     const [sql] = query.mock.calls[0];
     expect(sql).toContain('ON CONFLICT (user_id, url) WHERE url IS NOT NULL');
     expect(sql).toContain('DO UPDATE SET updated_at = now()');
@@ -88,6 +96,24 @@ describe('JobsRepository.create', () => {
       'SAVED',
       null,
     ]);
+  });
+
+  it('normalizes an empty or whitespace url to null so url-less entries do not collide', async () => {
+    await repo.create('user-1', { title: 'A', company: 'X', url: '' });
+    expect(query.mock.calls[0][1][4]).toBeNull();
+
+    query.mockClear();
+    await repo.create('user-1', { title: 'B', company: 'X', url: '   ' });
+    expect(query.mock.calls[0][1][4]).toBeNull();
+  });
+
+  it('trims a real url but keeps it', async () => {
+    await repo.create('user-1', {
+      title: 'A',
+      company: 'X',
+      url: '  https://s/1  ',
+    });
+    expect(query.mock.calls[0][1][4]).toBe('https://s/1');
   });
 });
 
@@ -116,7 +142,7 @@ describe('JobsRepository per-user scoping', () => {
     expect(values[4]).toBe('job-1');
   });
 
-  it('delete filters by user_id so one user cannot delete another\'s job', async () => {
+  it("delete filters by user_id so one user cannot delete another's job", async () => {
     await repo.delete('user-B', 'job-1');
     const [sql, values] = query.mock.calls[0];
     expect(sql).toContain('DELETE FROM jobs WHERE user_id = $1 AND id = $2');
@@ -131,11 +157,17 @@ describe('JobsRepository per-user scoping', () => {
   });
 
   it('findAll appends status/source/search filters after user_id', async () => {
-    await repo.findAll('user-B', { status: 'APPLIED', source: 'linkedin', search: 'acme' });
+    await repo.findAll('user-B', {
+      status: 'APPLIED',
+      source: 'linkedin',
+      search: 'acme',
+    });
     const [sql, values] = query.mock.calls[0];
     // user_id stays $1; filters are $2/$3/$4 (search reused for all three columns)
     expect(sql).toContain('WHERE user_id = $1 AND status = $2 AND source = $3');
-    expect(sql).toContain('(title ILIKE $4 OR company ILIKE $4 OR location ILIKE $4)');
+    expect(sql).toContain(
+      '(title ILIKE $4 OR company ILIKE $4 OR location ILIKE $4)',
+    );
     expect(sql).toContain('ORDER BY created_at DESC');
     expect(values).toEqual(['user-B', 'APPLIED', 'linkedin', '%acme%']);
   });
@@ -149,4 +181,3 @@ describe('JobsRepository per-user scoping', () => {
     expect(values).toEqual(['user-B', "%'; DROP TABLE jobs; --%"]);
   });
 });
-

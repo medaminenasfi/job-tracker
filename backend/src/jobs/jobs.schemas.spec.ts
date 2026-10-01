@@ -1,4 +1,8 @@
-import { createJobSchema, updateJobSchema, jobStatusSchema } from './jobs.schemas';
+import {
+  createJobSchema,
+  updateJobSchema,
+  jobStatusSchema,
+} from './jobs.schemas';
 
 describe('createJobSchema', () => {
   it('accepts a valid job and trims text', () => {
@@ -36,13 +40,24 @@ describe('createJobSchema', () => {
   it('rejects a missing title or company', () => {
     expect(createJobSchema.safeParse({ company: 'Acme' }).success).toBe(false);
     expect(createJobSchema.safeParse({ title: 'Eng' }).success).toBe(false);
-    expect(createJobSchema.safeParse({ title: '', company: '' }).success).toBe(false);
+    expect(createJobSchema.safeParse({ title: '', company: '' }).success).toBe(
+      false,
+    );
   });
 
   it('rejects an invalid url, source and status', () => {
-    expect(createJobSchema.safeParse({ title: 'T', company: 'C', url: 'not-a-url' }).success).toBe(false);
-    expect(createJobSchema.safeParse({ title: 'T', company: 'C', source: 'monster' }).success).toBe(false);
-    expect(createJobSchema.safeParse({ title: 'T', company: 'C', status: 'HIRED' }).success).toBe(false);
+    expect(
+      createJobSchema.safeParse({ title: 'T', company: 'C', url: 'not-a-url' })
+        .success,
+    ).toBe(false);
+    expect(
+      createJobSchema.safeParse({ title: 'T', company: 'C', source: 'monster' })
+        .success,
+    ).toBe(false);
+    expect(
+      createJobSchema.safeParse({ title: 'T', company: 'C', status: 'HIRED' })
+        .success,
+    ).toBe(false);
   });
 
   it('strips unknown keys so they cannot reach the DB', () => {
@@ -69,11 +84,37 @@ describe('updateJobSchema', () => {
   it('still rejects an invalid status on patch', () => {
     expect(updateJobSchema.safeParse({ status: 'NOPE' }).success).toBe(false);
   });
+
+  it('turns an empty note into null so a note can be deleted', () => {
+    const result = updateJobSchema.safeParse({ notes: '   ' });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.notes).toBeNull();
+  });
+
+  it('omits notes entirely when the key is not sent (leave unchanged)', () => {
+    const result = updateJobSchema.safeParse({ status: 'APPLIED' });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data).not.toHaveProperty('notes');
+  });
+
+  it('keeps a non-empty note trimmed', () => {
+    const result = updateJobSchema.safeParse({ notes: '  call recruiter  ' });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.notes).toBe('call recruiter');
+  });
 });
 
 describe('jobStatusSchema', () => {
   it('accepts every Kanban column and rejects others', () => {
-    for (const status of ['SAVED', 'APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'REJECTED', 'WITHDRAWN']) {
+    for (const status of [
+      'SAVED',
+      'APPLIED',
+      'SCREENING',
+      'INTERVIEW',
+      'OFFER',
+      'REJECTED',
+      'WITHDRAWN',
+    ]) {
       expect(jobStatusSchema.safeParse(status).success).toBe(true);
     }
     expect(jobStatusSchema.safeParse('applied').success).toBe(false);

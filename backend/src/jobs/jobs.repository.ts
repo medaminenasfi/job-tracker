@@ -18,6 +18,15 @@ const UPDATABLE_JOB_FIELDS = new Set([
   'notes',
 ]);
 
+// Treat a missing, empty, or whitespace-only url as NULL. The unique dedup index
+// is partial on `url IS NOT NULL`, so url-less manual entries must store NULL —
+// otherwise two manual jobs with url = '' for the same user would collide.
+function normalizeUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return value == null ? null : (value as string);
+  const trimmed = value.trim();
+  return trimmed === '' ? null : trimmed;
+}
+
 @Injectable()
 export class JobsRepository {
   constructor(private db: DbService) {}
@@ -39,7 +48,7 @@ export class JobsRepository {
         data.title,
         data.company,
         data.location ?? null,
-        data.url ?? null,
+        normalizeUrl(data.url),
         data.source ?? null,
         data.description ?? null,
         data.salary ?? null,
@@ -69,7 +78,9 @@ export class JobsRepository {
       idx++;
     }
     if (filter.search) {
-      conditions.push(`(title ILIKE $${idx} OR company ILIKE $${idx} OR location ILIKE $${idx})`);
+      conditions.push(
+        `(title ILIKE $${idx} OR company ILIKE $${idx} OR location ILIKE $${idx})`,
+      );
       values.push(`%${filter.search}%`);
       idx++;
     }
@@ -82,7 +93,10 @@ export class JobsRepository {
   }
 
   async findOne(userId: string, jobId: string) {
-    const result = await this.db.query('SELECT * FROM jobs WHERE user_id = $1 AND id = $2', [userId, jobId]);
+    const result = await this.db.query(
+      'SELECT * FROM jobs WHERE user_id = $1 AND id = $2',
+      [userId, jobId],
+    );
     return result.rows[0];
   }
 
@@ -93,7 +107,7 @@ export class JobsRepository {
     for (const [key, value] of Object.entries(data)) {
       if (value === undefined || !UPDATABLE_JOB_FIELDS.has(key)) continue;
       fields.push(`${key} = $${idx}`);
-      values.push(value);
+      values.push(key === 'url' ? normalizeUrl(value) : value);
       idx++;
     }
     if (fields.length === 0) return this.findOne(userId, jobId);
@@ -110,19 +124,24 @@ export class JobsRepository {
 
   async updateStatus(userId: string, jobId: string, status: string) {
     const applied_at = status === 'APPLIED' ? new Date() : null;
-    let query = 'UPDATE jobs SET status = $1, updated_at = $2 WHERE user_id = $3 AND id = $4 RETURNING *';
+    let query =
+      'UPDATE jobs SET status = $1, updated_at = $2 WHERE user_id = $3 AND id = $4 RETURNING *';
     let values: any[] = [status, new Date(), userId, jobId];
-    
+
     if (applied_at) {
-      query = 'UPDATE jobs SET status = $1, updated_at = $2, applied_at = $3 WHERE user_id = $4 AND id = $5 RETURNING *';
+      query =
+        'UPDATE jobs SET status = $1, updated_at = $2, applied_at = $3 WHERE user_id = $4 AND id = $5 RETURNING *';
       values = [status, new Date(), applied_at, userId, jobId];
     }
-    
+
     const result = await this.db.query(query, values);
     return result.rows[0];
   }
 
   async delete(userId: string, jobId: string) {
-    await this.db.query('DELETE FROM jobs WHERE user_id = $1 AND id = $2', [userId, jobId]);
+    await this.db.query('DELETE FROM jobs WHERE user_id = $1 AND id = $2', [
+      userId,
+      jobId,
+    ]);
   }
 }

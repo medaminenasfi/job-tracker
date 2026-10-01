@@ -1,9 +1,22 @@
 import { API_BASE } from './config';
-import type { ApiResult, JobData, SavedJob } from './types';
+import type { ApiResult, JobData, SavedJob, User } from './types';
 
 function errorResult(status: number, fallback: string): ApiResult<never> {
   if (status === 401) return { success: false, error: 'Session expired — please log in again' };
   return { success: false, error: `${fallback} (HTTP ${status})` };
+}
+
+// Fetches the signed-in user so the popup can greet them by name.
+export async function fetchMe(token: string): Promise<ApiResult<User>> {
+  try {
+    const response = await fetch(`${API_BASE}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) return errorResult(response.status, 'Failed to load your profile');
+    return { success: true, data: (await response.json()) as User };
+  } catch {
+    return { success: false, error: 'Cannot reach the Job Tracker API' };
+  }
 }
 
 export async function saveJob(job: JobData, token: string): Promise<ApiResult> {

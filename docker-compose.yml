@@ -49,6 +49,20 @@ services:
       - JWT_REFRESH_SECRET=super_secret_refresh_key_replace_in_prod
       - JWT_ACCESS_EXPIRY=15m
       - JWT_REFRESH_EXPIRY=7d
+      # Google OAuth (Phase 9). Values are interpolated from the repo-root .env
+      # (gitignored) so no secret is committed. Leave empty and Google sign-in is
+      # reported as "not configured". GOOGLE_CALLBACK_URL must match the authorized
+      # redirect URI in Google Cloud Console and route through the Next proxy.
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-687565989886-gba5dmvehd7ov83aj4tfltk4n7bev54q.apps.googleusercontent.com}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-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}
+      - GOOGLE_CALLBACK_URL=${GOOGLE_CALLBACK_URL:-http://localhost:3001/api/auth/google/callback}
+      # Cloudflare Turnstile (Phase 10). The default is Cloudflare's public
+      # "always passes" TEST secret so local dev exercises the real verification
+      # path with no signup. Override via the repo-root .env for production. The
+      # secret is server-side only and is never logged (AGENTS.md §13).
+      - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY:-1x0000000000000000000000000000000AA}
+      # Optional comma-separated allow-list; empty disables the hostname check.
+      - TURNSTILE_ALLOWED_HOSTNAMES=${TURNSTILE_ALLOWED_HOSTNAMES:-}
     restart: unless-stopped
 
   front:
@@ -63,6 +77,10 @@ services:
     command: sh -c "npm install && npx next dev -H 0.0.0.0 -p 3000"
     environment:
       - API_PROXY_TARGET=http://backend:3000
+      # Cloudflare Turnstile site key (public). Default = Cloudflare's "always
+      # passes" TEST site key for local dev. Override via the repo-root .env in
+      # production, then rebuild the web app (NEXT_PUBLIC_* is inlined).
+      - NEXT_PUBLIC_TURNSTILE_SITE_KEY=${NEXT_PUBLIC_TURNSTILE_SITE_KEY:-1x00000000000000000000AA}
     depends_on:
       - backend
     restart: unless-stopped

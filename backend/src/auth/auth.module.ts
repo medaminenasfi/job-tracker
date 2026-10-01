@@ -6,15 +6,25 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './jwt.strategy';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { RolesGuard } from './roles.guard';
+import { GoogleStrategy } from './google.strategy';
+import { GoogleAuthService } from './google-auth.service';
+import { TurnstileService } from './turnstile.service';
 
 @Module({
-  imports: [
-    DbModule,
-    PassportModule,
-    JwtModule.register({}),
-  ],
+  imports: [DbModule, PassportModule, JwtModule.register({})],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtAuthGuard],
-  exports: [JwtAuthGuard],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    JwtAuthGuard,
+    RolesGuard,
+    GoogleStrategy,
+    GoogleAuthService,
+    TurnstileService,
+  ],
+  // TurnstileService is exported so AdminModule (which imports AuthModule) can
+  // resolve it for the TurnstileGuard on POST /admin/auth/login.
+  exports: [JwtAuthGuard, RolesGuard, AuthService, TurnstileService],
 })
 export class AuthModule {}

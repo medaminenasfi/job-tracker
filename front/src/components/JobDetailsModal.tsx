@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { Job, JobStatus } from '@/lib/types';
@@ -15,6 +15,16 @@ export function JobDetailsModal({ job, isOpen, onClose }: JobDetailsModalProps) 
   const queryClient = useQueryClient();
   const [notes, setNotes] = useState(job?.notes || '');
   const [status, setStatus] = useState<JobStatus>(job?.status || 'SAVED');
+  const [noteMsg, setNoteMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // The modal stays mounted while `job` swaps between cards, so re-sync the local
+  // editors whenever a different job is opened. Without this, opening job B showed
+  // job A's note/status and saving would overwrite the wrong record.
+  useEffect(() => {
+    setNotes(job?.notes || '');
+    setStatus(job?.status || 'SAVED');
+    setNoteMsg(null);
+  }, [job?.id, job?.notes, job?.status]);
 
   const updateJobMutation = useMutation({
     mutationFn: async (data: { notes?: string; status?: JobStatus }) => {
@@ -44,7 +54,28 @@ export function JobDetailsModal({ job, isOpen, onClose }: JobDetailsModalProps) 
   });
 
   const handleSaveNotes = () => {
-    updateJobMutation.mutate({ notes });
+    setNoteMsg(null);
+    updateJobMutation.mutate(
+      { notes },
+      {
+        onSuccess: () =>
+          setNoteMsg({ type: 'success', text: notes.trim() ? 'Notes saved' : 'Note deleted' }),
+        onError: () => setNoteMsg({ type: 'error', text: 'Failed to save notes' }),
+      },
+    );
+  };
+
+  // Explicit delete: clear the textarea and persist an empty note (stored as NULL).
+  const handleClearNotes = () => {
+    setNotes('');
+    setNoteMsg(null);
+    updateJobMutation.mutate(
+      { notes: '' },
+      {
+        onSuccess: () => setNoteMsg({ type: 'success', text: 'Note deleted' }),
+        onError: () => setNoteMsg({ type: 'error', text: 'Failed to delete note' }),
+      },
+    );
   };
 
   const handleStatusChange = (newStatus: JobStatus) => {
@@ -131,13 +162,32 @@ export function JobDetailsModal({ job, isOpen, onClose }: JobDetailsModalProps) 
               rows={4}
               placeholder="Add your notes..."
             />
-            <button
-              onClick={handleSaveNotes}
-              disabled={updateJobMutation.isPending}
-              className="mt-2 px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 transition-colors text-sm"
-            >
-              {updateJobMutation.isPending ? 'Saving...' : 'Save Notes'}
-            </button>
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                onClick={handleSaveNotes}
+                disabled={updateJobMutation.isPending}
+                className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 transition-colors text-sm"
+              >
+                {updateJobMutation.isPending ? 'Saving...' : 'Save Notes'}
+              </button>
+              {(notes.trim() !== '' || (job?.notes ?? '') !== '') && (
+                <button
+                  onClick={handleClearNotes}
+                  disabled={updateJobMutation.isPending}
+                  className="px-4 py-2 bg-white text-red-600 border border-red-300 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors text-sm"
+                >
+                  Delete Note
+                </button>
+              )}
+            </div>
+            {noteMsg && (
+              <p
+                role="status"
+                className={`mt-2 text-sm ${noteMsg.type === 'success' ? 'text-green-600' : 'text-red-600'}`}
+              >
+                {noteMsg.text}
+              </p>
+            )}
           </div>
 
           <div className="flex items-center gap-4 pt-4 border-t border-gray-200">

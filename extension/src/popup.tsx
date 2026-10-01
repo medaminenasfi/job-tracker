@@ -1,13 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
 import './popup.css';
-import type { ApiResult, JobData, SavedJob } from './types';
-import type { SaveJobResult } from './messages';
+import type { ApiResult, JobData, SavedJob, User } from './types';
+import type { RuntimeMessage, SaveJobResult } from './messages';
+import { EXTRACT_RESULT, LOGOUT } from './messages';
 import { WEB_ORIGIN } from './config';
+// CRXJS `?script` build of the on-demand extractor. Injected into the active tab
+// only when the declarative content script isn't there, so job data can be pulled
+// from ANY website (not just LinkedIn/Indeed) using the same parsers.
+import extractorScript from './extractor?script';
 
 function Popup() {
   const [jobData, setJobData] = useState<JobData>({});
   const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -24,6 +30,41 @@ function Popup() {
     });
   }, []);
 
+  const loadUser = useCallback(() => {
+    chrome.runtime.sendMessage({ type: 'GET_ME' }, (response: ApiResult<User> | undefined) => {
+      if (response?.success && response.data) setUser(response.data);
+    });
+  }, []);
+
+  // Pulls job data from the active tab. First asks an already-injected content
+  // script (LinkedIn/Indeed/web app). If none is listening — i.e. any other site —
+  // falls back to injecting the extractor on demand via the Scripting API (allowed
+  // by the activeTab grant the user gave by clicking the toolbar icon).
+  const extractFromTab = useCallback((tabId: number) => {
+    chrome.tabs.sendMessage(tabId, { type: 'EXTRACT_JOB' } satisfies RuntimeMessage, (response) => {
+      if (!chrome.runtime.lastError && response?.job) {
+        setJobData(response.job as JobData);
+        return;
+      }
+      // No content script on this page: inject the extractor and await its result.
+      const onResult = (msg: RuntimeMessage | undefined) => {
+        if (msg?.type === EXTRACT_RESULT && msg.job) {
+          setJobData(msg.job as JobData);
+          chrome.runtime.onMessage.removeListener(onResult);
+        }
+      };
+      chrome.runtime.onMessage.addListener(onResult);
+      chrome.scripting.executeScript(
+        { target: { tabId }, files: [extractorScript] },
+        () => {
+          if (chrome.runtime.lastError) chrome.runtime.onMessage.removeListener(onResult);
+        },
+      );
+      // Safety: drop the listener if the page never responds (e.g. injection blocked).
+      setTimeout(() => chrome.runtime.onMessage.removeListener(onResult), 4000);
+    });
+  }, []);
+
   useEffect(() => {
     chrome.runtime.sendMessage({ type: 'GET_TOKEN' }, (response) => {
       setToken(response?.token ?? null);
@@ -34,16 +75,16 @@ function Popup() {
       const tab = tabs[0];
       if (tab?.url) setCurrentUrl(tab.url);
       if (!tab?.id) return;
-      chrome.tabs.sendMessage(tab.id, { type: 'EXTRACT_JOB' }, (response) => {
-        if (chrome.runtime.lastError) return;
-        if (response?.job) setJobData(response.job);
-      });
+      extractFromTab(tab.id);
     });
-  }, []);
+  }, [extractFromTab]);
 
   useEffect(() => {
-    if (token) loadJobs();
-  }, [token, loadJobs]);
+    if (token) {
+      loadJobs();
+      loadUser();
+    }
+  }, [token, loadJobs, loadUser]);
 
   const matchedJob = jobs.find((job) => job.url && currentUrl && job.url === currentUrl);
 
@@ -61,6 +102,9 @@ function Popup() {
 
     if (response?.success) {
       setMessage({ type: 'success', text: 'Job saved successfully!' });
+      // Clear the free-text note so the next save starts fresh; keep the
+      // auto-detected fields (title/company/…) for reference.
+      setJobData((prev) => ({ ...prev, notes: '' }));
       loadJobs();
     } else {
       setMessage({ type: 'error', text: response?.error || 'Failed to save job' });
@@ -91,6 +135,16 @@ function Popup() {
     chrome.tabs.create({ url: `${WEB_ORIGIN}/extension-login` });
   };
 
+  const handleLogout = () => {
+    chrome.runtime.sendMessage({ type: LOGOUT } satisfies RuntimeMessage, () => {
+      setToken(null);
+      setUser(null);
+      setJobs([]);
+      setMessage(null);
+      setApplyMsg(null);
+    });
+  };
+
   if (loading) {
     return <div className="popup">Loading...</div>;
   }
@@ -98,7 +152,15 @@ function Popup() {
   return (
     <div className="popup">
       <div className="header">
-        <h2>Job Tracker</h2>
+        <div className="header-title">
+          <h2>Job Tracker</h2>
+          {token && user && <p className="user-name">Signed in as {user.name}</p>}
+        </div>
+        {token && (
+          <button onClick={handleLogout} className="btn-logout" title="Sign out">
+            Log out
+          </button>
+        )}
       </div>
 
       {!token ? (
@@ -147,6 +209,16 @@ function Popup() {
               value={jobData.salary || ''}
               onChange={(e) => setJobData({ ...jobData, salary: e.target.value })}
               placeholder="Salary"
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Note</label>
+            <textarea
+              value={jobData.notes || ''}
+              onChange={(e) => setJobData({ ...jobData, notes: e.target.value })}
+              placeholder="Add a note (referral, follow-up, etc.)"
+              rows={3}
             />
           </div>
 

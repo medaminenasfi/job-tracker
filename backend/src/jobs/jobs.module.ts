@@ -8,6 +8,6 @@ import { AuthModule } from '../auth/auth.module';
 @Module({
   imports: [DbModule, AuthModule],
   controllers: [JobsController],
-  providers: [JobsService, JobsRepository]
+  providers: [JobsService, JobsRepository],
 })
 export class JobsModule {}

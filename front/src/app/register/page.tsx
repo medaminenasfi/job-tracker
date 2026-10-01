@@ -1,8 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { PasswordInput } from '@/components/PasswordInput';
+import { GoogleButton } from '@/components/GoogleButton';
+import { TurnstileField, type TurnstileFieldHandle } from '@/components/TurnstileField';
+import { readUrlError } from '@/lib/auth-errors';
 import Link from 'next/link';
 
 export default function RegisterPage() {
@@ -12,6 +15,14 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+  const turnstileRef = useRef<TurnstileFieldHandle>(null);
+
+  // Surface an OAuth failure the callback redirected here with (?error=...).
+  useEffect(() => {
+    const msg = readUrlError();
+    if (msg) setError(msg);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,9 +30,11 @@ export default function RegisterPage() {
     if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
     setLoading(true);
     try {
-      await register(name, email, password);
+      await register(name, email, password, token);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Registration failed');
+      // The token is single-use and now spent — reset so the user can retry.
+      turnstileRef.current?.reset();
     } finally {
       setLoading(false);
     }
@@ -43,6 +56,14 @@ export default function RegisterPage() {
             {error}
           </div>
         )}
+
+        <GoogleButton label="Sign up with Google" />
+
+        <div className="my-5 flex items-center gap-3">
+          <div className="h-px flex-1 bg-gray-200" />
+          <span className="text-xs text-gray-400">or</span>
+          <div className="h-px flex-1 bg-gray-200" />
+        </div>
 
         <form id="register-form" onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -82,13 +103,15 @@ export default function RegisterPage() {
             />
           </div>
 
+          <TurnstileField action="register" onToken={setToken} ref={turnstileRef} />
+
           <button
             id="register-submit"
             type="submit"
-            disabled={loading}
+            disabled={loading || !token}
             className="w-full bg-black hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg transition-colors"
           >
-            {loading ? 'Creating account...' : 'Create account'}
+            {loading ? 'Creating account...' : token ? 'Create account' : 'Verifying…'}
           </button>
         </form>
 

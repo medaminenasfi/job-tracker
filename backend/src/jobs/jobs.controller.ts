@@ -1,4 +1,15 @@
-import { Controller, Post, Get, Body, Param, Patch, Delete, UseGuards, Request, Query } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  Param,
+  Patch,
+  Delete,
+  UseGuards,
+  Request,
+  Query,
+} from '@nestjs/common';
 import { JobsService } from './jobs.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
@@ -28,7 +39,11 @@ export class JobsController {
   }
 
   @Patch(':id/status')
-  updateStatus(@Request() req: any, @Param('id') id: string, @Body('status') status: any) {
+  updateStatus(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body('status') status: any,
+  ) {
     return this.jobsService.updateStatus(req.user.id, id, status);
   }
 

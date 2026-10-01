@@ -8,6 +8,14 @@ export interface JobData {
   source?: JobSource;
   description?: string;
   salary?: string;
+  notes?: string;
+}
+
+// Shape returned by GET /auth/me (subset the popup displays).
+export interface User {
+  id: string;
+  name: string;
+  email: string;
 }
 
 export type JobStatus =

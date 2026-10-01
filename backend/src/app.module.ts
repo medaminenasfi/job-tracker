@@ -8,6 +8,8 @@ import { DbModule } from './db/db.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { JobsModule } from './jobs/jobs.module';
+import { AdminModule } from './admin/admin.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -19,11 +21,10 @@ import { JobsModule } from './jobs/jobs.module';
     AuthModule,
     UsersModule,
     JobsModule,
+    AdminModule,
+    DashboardModule,
   ],
   controllers: [AppController],
-  providers: [
-    AppService,
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
-  ],
+  providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

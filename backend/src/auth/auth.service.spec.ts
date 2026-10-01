@@ -4,7 +4,11 @@ jest.mock('@nestjs/jwt', () => ({
 
 import { AuthService } from './auth.service';
 import { JwtService } from '@nestjs/jwt';
-import { ConflictException, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import {
+  ConflictException,
+  UnauthorizedException,
+  BadRequestException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 
 describe('AuthService', () => {
@@ -22,7 +26,10 @@ describe('AuthService', () => {
       verify: jest.fn().mockReturnValue({ sub: 'user-1' }),
     };
     res = { cookie: jest.fn(), clearCookie: jest.fn() };
-    service = new AuthService({ query } as never, jwtService as unknown as JwtService);
+    service = new AuthService(
+      { query } as never,
+      jwtService as unknown as JwtService,
+    );
   });
 
   it('registers a user and sets a refresh cookie', async () => {
@@ -51,13 +58,21 @@ describe('AuthService', () => {
   it('rejects duplicate emails', async () => {
     query.mockResolvedValueOnce({ rows: [{ id: 'existing' }] });
     await expect(
-      service.register({ name: 'Ada', email: 'ada@example.com', password: 'secret1' }),
+      service.register({
+        name: 'Ada',
+        email: 'ada@example.com',
+        password: 'secret1',
+      }),
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
   it('rejects invalid register payloads', async () => {
     await expect(
-      service.register({ name: 'Ada', email: 'not-an-email', password: 'secret1' }),
+      service.register({
+        name: 'Ada',
+        email: 'not-an-email',
+        password: 'secret1',
+      }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -90,16 +105,16 @@ describe('AuthService', () => {
   });
 
   it('refuses refresh without a token', async () => {
-    await expect(service.refresh(undefined, res as never)).rejects.toBeInstanceOf(
-      UnauthorizedException,
-    );
+    await expect(
+      service.refresh(undefined, res as never),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('refuses refresh when the token is not stored', async () => {
     query.mockResolvedValueOnce({ rows: [] });
-    await expect(service.refresh('refresh-token', res as never)).rejects.toBeInstanceOf(
-      UnauthorizedException,
-    );
+    await expect(
+      service.refresh('refresh-token', res as never),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('revokes the refresh token on logout', async () => {
@@ -110,6 +125,33 @@ describe('AuthService', () => {
     expect(res.clearCookie).toHaveBeenCalledWith(
       'refreshToken',
       expect.objectContaining({ httpOnly: true, path: '/' }),
+    );
+  });
+
+  it('writes the separate admin cookie when issued with ADMIN_COOKIE', async () => {
+    query.mockResolvedValueOnce({ rows: [] });
+    await service.issueSession('admin-1', 'ADMIN', res as never, {
+      name: 'adminRefreshToken',
+    });
+    expect(res.cookie).toHaveBeenCalledWith(
+      'adminRefreshToken',
+      'signed-token',
+      expect.objectContaining({ httpOnly: true, path: '/' }),
+    );
+  });
+
+  it('clears only the admin cookie on admin logout', async () => {
+    query.mockResolvedValueOnce({ rows: [] });
+    await service.logout('admin-refresh', res as never, {
+      name: 'adminRefreshToken',
+    });
+    expect(res.clearCookie).toHaveBeenCalledWith(
+      'adminRefreshToken',
+      expect.objectContaining({ httpOnly: true, path: '/' }),
+    );
+    expect(res.clearCookie).not.toHaveBeenCalledWith(
+      'refreshToken',
+      expect.anything(),
     );
   });
 });

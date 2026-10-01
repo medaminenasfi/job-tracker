@@ -49,7 +49,7 @@ export function Sidebar() {
           <p className="text-xs text-gray-500 truncate">{user?.email}</p>
         </div>
         <button
-          onClick={logout}
+          onClick={() => logout()}
           className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
         >
           <span>🚪</span>

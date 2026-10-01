@@ -43,7 +43,17 @@ export default function ExtensionLoginPage() {
         event.data?.source === BRIDGE_SOURCE &&
         event.data?.type === 'TOKEN_SAVED'
       ) {
-        if (!cancelled) setStatus('connected');
+        if (!cancelled) {
+          // Remember that the extension is connected so the dashboard checklist
+          // can tick the "install extension" step on this origin.
+          try {
+            localStorage.setItem('jt_extension_connected', '1');
+          } catch {
+            // Storage may be unavailable (private mode); the checklist still
+            // falls back to the server-derived flag.
+          }
+          setStatus('connected');
+        }
       }
     };
 

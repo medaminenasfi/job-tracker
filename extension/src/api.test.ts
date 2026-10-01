@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { saveJob, fetchJobs, markJobApplied, findJobByUrl } from './api';
+import { saveJob, fetchJobs, markJobApplied, findJobByUrl, fetchMe } from './api';
 import { API_BASE } from './config';
-import type { SavedJob } from './types';
+import type { SavedJob, User } from './types';
 
 const job = { title: 'Engineer', company: 'Acme', source: 'manual' as const };
 
@@ -37,6 +37,26 @@ describe('saveJob', () => {
 
     expect(result).toEqual({ success: false, error: 'Title and company are required' });
     expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it('includes the note in the request body when provided', async () => {
+    const withNote = { ...job, notes: 'Referred by Sam' };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => ({ id: 'job-2', ...withNote }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await saveJob(withNote, 'token-123');
+
+    expect(result.success).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(`${API_BASE}/jobs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer token-123' },
+      body: JSON.stringify(withNote),
+    });
     vi.unstubAllGlobals();
   });
 
@@ -103,6 +123,36 @@ describe('markJobApplied', () => {
     vi.stubGlobal('fetch', fetchMock);
     expect(await markJobApplied('', 'token')).toEqual({ success: false, error: 'No job selected' });
     expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('fetchMe', () => {
+  it('returns the signed-in user with the bearer token', async () => {
+    const me: User = { id: 'u1', name: 'Jane Smith', email: 'jane@example.com' };
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => me });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await fetchMe('token-1');
+
+    expect(result).toEqual({ success: true, data: me });
+    expect(fetchMock).toHaveBeenCalledWith(`${API_BASE}/auth/me`, {
+      headers: { Authorization: 'Bearer token-1' },
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it('surfaces a 401 as an expired session', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({}) }));
+    const result = await fetchMe('bad');
+    expect(result.error).toBe('Session expired — please log in again');
+    vi.unstubAllGlobals();
+  });
+
+  it('reports a network failure gracefully', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
+    const result = await fetchMe('token');
+    expect(result).toEqual({ success: false, error: 'Cannot reach the Job Tracker API' });
     vi.unstubAllGlobals();
   });
 });

@@ -13,6 +13,31 @@ body {
   margin-bottom: 16px;
   padding-bottom: 12px;
   border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.header-title {
+  min-width: 0;
+}
+
+.btn-logout {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background-color: #fff;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.btn-logout:hover {
+  background-color: #f3f4f6;
 }
 
 .header h2 {
@@ -20,6 +45,12 @@ body {
   font-size: 18px;
   font-weight: 600;
   color: #111827;
+}
+
+.user-name {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #6b7280;
 }
 
 .login-section {
@@ -58,6 +89,20 @@ body {
 }
 
 .form-group input:focus {
+  outline: none;
+  border-color: #111827;
+}
+
+.form-group textarea {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.form-group textarea:focus {
   outline: none;
   border-color: #111827;
 }

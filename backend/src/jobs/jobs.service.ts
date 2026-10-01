@@ -1,6 +1,11 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { JobsRepository } from './jobs.repository';
-import { createJobSchema, updateJobSchema, jobStatusSchema, jobQuerySchema } from './jobs.schemas';
+import {
+  createJobSchema,
+  updateJobSchema,
+  jobStatusSchema,
+  jobQuerySchema,
+} from './jobs.schemas';
 
 @Injectable()
 export class JobsService {
@@ -26,7 +31,9 @@ export class JobsService {
   findAll(userId: string, query: unknown = {}) {
     const parsed = jobQuerySchema.safeParse(query ?? {});
     if (!parsed.success) {
-      throw new BadRequestException(parsed.error.issues[0]?.message ?? 'Invalid filter');
+      throw new BadRequestException(
+        parsed.error.issues[0]?.message ?? 'Invalid filter',
+      );
     }
     return this.jobsRepository.findAll(userId, parsed.data);
   }
@@ -38,7 +45,9 @@ export class JobsService {
   update(userId: string, jobId: string, data: unknown) {
     const parsed = updateJobSchema.safeParse(data);
     if (!parsed.success) {
-      throw new BadRequestException(parsed.error.issues[0]?.message ?? 'Invalid input');
+      throw new BadRequestException(
+        parsed.error.issues[0]?.message ?? 'Invalid input',
+      );
     }
     return this.jobsRepository.update(userId, jobId, parsed.data);
   }

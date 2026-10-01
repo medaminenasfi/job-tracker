@@ -24,7 +24,10 @@ describe('auth schemas', () => {
   });
 
   it('rejects invalid login emails', () => {
-    const result = loginSchema.safeParse({ email: 'nope', password: 'secret1' });
+    const result = loginSchema.safeParse({
+      email: 'nope',
+      password: 'secret1',
+    });
     expect(result.success).toBe(false);
   });
 });

@@ -1,4 +1,4 @@
-import { saveJob, fetchJobs, markJobApplied, findJobByUrl } from './api';
+import { saveJob, fetchJobs, markJobApplied, findJobByUrl, fetchMe } from './api';
 import type { ApiResult, JobData } from './types';
 import type { RuntimeMessage } from './messages';
 
@@ -45,6 +45,16 @@ chrome.runtime.onMessage.addListener(
 
       case 'SET_TOKEN':
         chrome.storage.local.set({ authToken: request.token }, () => sendResponse({ success: true }));
+        return true;
+
+      case 'LOGOUT':
+        // The extension only holds the access token (no refresh cookie), so
+        // clearing local storage fully signs it out.
+        chrome.storage.local.remove('authToken', () => sendResponse({ success: true }));
+        return true;
+
+      case 'GET_ME':
+        withToken((token) => fetchMe(token)).then(sendResponse);
         return true;
 
       case 'SAVE_JOB':
