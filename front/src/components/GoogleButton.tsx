@@ -1,12 +1,23 @@
+'use client';
+
+import { useState } from 'react';
+import { LoadingSpinner } from '@/components/ui/Loading';
+
 // "Continue with Google" — a plain link to the API's OAuth entry point. It goes
 // through the same-origin Next proxy (/api/auth/google) so the whole redirect
 // flow, the state cookie, and the final refresh cookie all stay on the web origin.
 export function GoogleButton({ label = 'Continue with Google' }: { label?: string }) {
+  const [connecting, setConnecting] = useState(false);
+
   return (
     <a
       id="google-signin"
       href="/api/auth/google"
-      className="w-full flex items-center justify-center gap-3 border border-gray-300 rounded-lg px-4 py-2.5 text-black font-semibold hover:bg-gray-50 transition-colors"
+      onClick={() => setConnecting(true)}
+      aria-busy={connecting}
+      className={`w-full flex items-center justify-center gap-3 border border-input rounded-lg px-4 py-2.5 text-foreground font-semibold hover:bg-muted transition-colors ${
+        connecting ? 'pointer-events-none opacity-60' : ''
+      }`}
     >
       <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
         <path
@@ -26,7 +37,7 @@ export function GoogleButton({ label = 'Continue with Google' }: { label?: strin
           d="M9 3.58c1.32 0 2.5.46 3.44 1.35l2.58-2.59A9 9 0 0 0 .96 4.94l3.02 2.34C4.68 5.16 6.66 3.58 9 3.58z"
         />
       </svg>
-      {label}
+      {connecting ? <><LoadingSpinner size="sm" /> Connecting...</> : label}
     </a>
   );
 }

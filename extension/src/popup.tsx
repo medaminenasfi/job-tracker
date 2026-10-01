@@ -10,7 +10,20 @@ import { WEB_ORIGIN } from './config';
 // from ANY website (not just LinkedIn/Indeed) using the same parsers.
 import extractorScript from './extractor?script';
 
-function Popup() {
+function isSessionExpired(response?: ApiResult): boolean {
+  return response?.error?.startsWith('Session expired') ?? false;
+}
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
+export function Popup() {
   const [jobData, setJobData] = useState<JobData>({});
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -26,12 +39,19 @@ function Popup() {
 
   const loadJobs = useCallback(() => {
     chrome.runtime.sendMessage({ type: 'GET_JOBS' }, (response: ApiResult<SavedJob[]> | undefined) => {
+      if (isSessionExpired(response)) setToken(null);
       if (response?.success && response.data) setJobs(response.data);
     });
   }, []);
 
   const loadUser = useCallback(() => {
     chrome.runtime.sendMessage({ type: 'GET_ME' }, (response: ApiResult<User> | undefined) => {
+      if (isSessionExpired(response)) {
+        setToken(null);
+        setUser(null);
+        setJobs([]);
+        return;
+      }
       if (response?.success && response.data) setUser(response.data);
     });
   }, []);
@@ -107,6 +127,11 @@ function Popup() {
       setJobData((prev) => ({ ...prev, notes: '' }));
       loadJobs();
     } else {
+      if (isSessionExpired(response)) {
+        setToken(null);
+        setUser(null);
+        setJobs([]);
+      }
       setMessage({ type: 'error', text: response?.error || 'Failed to save job' });
     }
   };
@@ -127,6 +152,11 @@ function Popup() {
       setApplyMsg({ type: 'success', text: 'Marked as applied' });
       setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, status: 'APPLIED' } : j)));
     } else {
+      if (isSessionExpired(response)) {
+        setToken(null);
+        setUser(null);
+        setJobs([]);
+      }
       setApplyMsg({ type: 'error', text: response?.error || 'Failed to update status' });
     }
   };
@@ -146,15 +176,31 @@ function Popup() {
   };
 
   if (loading) {
-    return <div className="popup">Loading...</div>;
+    // Skeleton shaped like the real content instead of a bare "Loading...".
+    return (
+      <div className="popup" role="status" aria-label="Loading">
+        <div className="skeleton sk-header" />
+        <div className="skeleton sk-field" />
+        <div className="skeleton sk-field" />
+        <div className="skeleton sk-field" />
+        <div className="skeleton sk-btn" />
+        <span className="sr-only">Loading…</span>
+      </div>
+    );
   }
 
   return (
     <div className="popup">
       <div className="header">
-        <h2>Job Tracker</h2>
+        <div className="brand">
+          <img className="brand-mark" src="/icon.png" alt="ApplyTracker" />
+          <h2>Job Tracker</h2>
+        </div>
         {token && user && (
           <div className="user-chip">
+            <span className="user-avatar" aria-hidden="true">
+              {initials(user.name)}
+            </span>
             <span className="user-chip-name" title={user.name}>
               {user.name}
             </span>
@@ -193,6 +239,17 @@ function Popup() {
         </div>
       ) : (
         <div className="content">
+          {jobData.source ? (
+            <p className="detect-note">
+              Detected on this page
+              <span className="source-chip">{jobData.source}</span>
+            </p>
+          ) : (
+            <p className="detect-note">
+              No job detected on this page — fill in the details below.
+            </p>
+          )}
+
           <div className="form-group">
             <label>Title</label>
             <input
@@ -242,11 +299,14 @@ function Popup() {
           <hr className="divider" />
 
           <div className="apply-section">
-            <h3>Applications</h3>
+            <h3 className="section-title">Applications</h3>
             {matchedJob ? (
               <>
                 <p className="hint">
-                  Saved job for this page: <strong>{matchedJob.title}</strong> ({matchedJob.status})
+                  Saved job for this page: <strong>{matchedJob.title}</strong>
+                  <span className={`status-badge status-${matchedJob.status.toLowerCase()}`}>
+                    {matchedJob.status}
+                  </span>
                 </p>
                 <button
                   onClick={() => markApplied(matchedJob.id)}
@@ -293,5 +353,8 @@ function Popup() {
   );
 }
 
-const root = ReactDOM.createRoot(document.getElementById('root')!);
-root.render(<Popup />);
+const rootEl = document.getElementById('root');
+// Guarded so the module can be imported in tests without a mount point.
+if (rootEl) {
+  ReactDOM.createRoot(rootEl).render(<Popup />);
+}

@@ -38,8 +38,24 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
       BEGIN
         IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'job_status') THEN
           CREATE TYPE job_status AS ENUM (
-            'SAVED', 'APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'REJECTED', 'WITHDRAWN'
+            'SAVED', 'APPLIED', 'ACCEPTED', 'INTERVIEW', 'OFFER', 'REJECTED', 'WITHDRAWN'
           );
+        END IF;
+      END
+      $$;
+
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM pg_enum e
+          JOIN pg_type t ON t.oid = e.enumtypid
+          WHERE t.typname = 'job_status' AND e.enumlabel = 'SCREENING'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM pg_enum e
+          JOIN pg_type t ON t.oid = e.enumtypid
+          WHERE t.typname = 'job_status' AND e.enumlabel = 'ACCEPTED'
+        ) THEN
+          ALTER TYPE job_status RENAME VALUE 'SCREENING' TO 'ACCEPTED';
         END IF;
       END
       $$;
@@ -62,6 +78,37 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
         created_at timestamptz DEFAULT now(),
         updated_at timestamptz DEFAULT now()
       );
+
+      ALTER TABLE jobs ALTER COLUMN status TYPE text USING status::text;
+
+      CREATE TABLE IF NOT EXISTS job_statuses (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id uuid REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+        name text NOT NULL,
+        color text NOT NULL DEFAULT 'slate',
+        position integer NOT NULL DEFAULT 0,
+        is_default boolean NOT NULL DEFAULT false,
+        created_at timestamptz DEFAULT now(),
+        updated_at timestamptz DEFAULT now(),
+        UNIQUE (user_id, name)
+      );
+      CREATE INDEX IF NOT EXISTS idx_job_statuses_user_id ON job_statuses(user_id);
+
+      INSERT INTO job_statuses (user_id, name, color, position, is_default)
+      SELECT u.id, defaults.name, defaults.color, defaults.position, true
+      FROM users u
+      CROSS JOIN (VALUES
+        ('SAVED', 'sky', 0), ('APPLIED', 'blue', 1), ('ACCEPTED', 'violet', 2),
+        ('INTERVIEW', 'amber', 3), ('OFFER', 'emerald', 4), ('REJECTED', 'rose', 5),
+        ('WITHDRAWN', 'slate', 6)
+      ) AS defaults(name, color, position)
+      WHERE NOT EXISTS (
+        SELECT 1 FROM job_statuses s
+        WHERE s.user_id = u.id AND lower(s.name) = lower(defaults.name)
+      );
+
+      UPDATE jobs SET status = 'ACCEPTED'::job_status
+       WHERE status::text = 'SCREENING';
 
       CREATE INDEX IF NOT EXISTS idx_jobs_user_id ON jobs(user_id);
       CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);

@@ -42,8 +42,8 @@ export default function AdminJobsPage() {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-black">Jobs</h1>
-        <p className="text-gray-500 text-sm mt-1">All jobs across every user (read-only except deletion)</p>
+        <h1 className="text-2xl font-bold text-foreground">Jobs</h1>
+        <p className="text-muted-foreground text-sm mt-1">All jobs across every user (read-only except deletion)</p>
       </div>
 
       <div className="flex flex-wrap gap-3 mb-4">
@@ -52,22 +52,22 @@ export default function AdminJobsPage() {
           value={userId}
           onChange={(e) => { setUserId(e.target.value.trim()); setPage(1); }}
           placeholder="Filter by user UUID"
-          className="border border-gray-300 rounded-lg px-4 py-2 text-black focus:outline-none focus:border-black"
+          className="border border-input rounded-lg px-4 py-2 text-foreground focus:outline-none focus:border-ring"
         />
         <select
           value={status}
           onChange={(e) => { setStatus(e.target.value); setPage(1); }}
-          className="border border-gray-300 rounded-lg px-4 py-2 text-black focus:outline-none focus:border-black"
+          className="border border-input rounded-lg px-4 py-2 text-foreground focus:outline-none focus:border-ring"
         >
           <option value="">All statuses</option>
-          {['SAVED', 'APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'REJECTED', 'WITHDRAWN'].map((s) => (
+          {['SAVED', 'APPLIED', 'ACCEPTED', 'INTERVIEW', 'OFFER', 'REJECTED', 'WITHDRAWN'].map((s) => (
             <option key={s} value={s}>{s}</option>
           ))}
         </select>
         <select
           value={source}
           onChange={(e) => { setSource(e.target.value); setPage(1); }}
-          className="border border-gray-300 rounded-lg px-4 py-2 text-black focus:outline-none focus:border-black"
+          className="border border-input rounded-lg px-4 py-2 text-foreground focus:outline-none focus:border-ring"
         >
           <option value="">All sources</option>
           {['linkedin', 'indeed', 'generic', 'manual'].map((s) => (
@@ -76,7 +76,7 @@ export default function AdminJobsPage() {
         </select>
       </div>
 
-      {isLoading && <div className="text-gray-500">Loading...</div>}
+      {isLoading && <div className="text-muted-foreground">Loading...</div>}
       {isError && (
         <div className="text-red-600" role="alert">
           Failed to load jobs: {error instanceof Error ? error.message : 'unknown error'}
@@ -84,15 +84,15 @@ export default function AdminJobsPage() {
       )}
 
       {data && data.data.length === 0 && (
-        <div className="text-gray-500 bg-white border border-gray-200 rounded-lg p-6">
+        <div className="text-muted-foreground bg-card border border-border rounded-lg p-6">
           No jobs match your filters.
         </div>
       )}
 
       {data && data.data.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
+        <div className="bg-card border border-border rounded-lg overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-600 text-left">
+            <thead className="bg-muted text-muted-foreground text-left">
               <tr>
                 <th className="px-4 py-3 font-medium">Title</th>
                 <th className="px-4 py-3 font-medium">Company</th>
@@ -105,13 +105,13 @@ export default function AdminJobsPage() {
             </thead>
             <tbody>
               {data.data.map((j) => (
-                <tr key={j.id} className="border-t border-gray-100">
-                  <td className="px-4 py-3 text-black">{j.title}</td>
-                  <td className="px-4 py-3 text-gray-600">{j.company}</td>
-                  <td className="px-4 py-3 text-gray-500">{j.user_email ?? '—'}</td>
-                  <td className="px-4 py-3 text-gray-600">{j.status}</td>
-                  <td className="px-4 py-3 text-gray-600">{j.source ?? '—'}</td>
-                  <td className="px-4 py-3 text-gray-500">{new Date(j.created_at).toLocaleDateString()}</td>
+                <tr key={j.id} className="border-t border-border">
+                  <td className="px-4 py-3 text-foreground">{j.title}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{j.company}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{j.user_email ?? '—'}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{j.status}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{j.source ?? '—'}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{new Date(j.created_at).toLocaleDateString()}</td>
                   <td className="px-4 py-3">
                     <button onClick={() => setConfirmDelete(j)} className="text-red-600 hover:underline">Delete</button>
                   </td>
@@ -124,22 +124,22 @@ export default function AdminJobsPage() {
 
       {data && data.total > PAGE_SIZE && (
         <div className="flex items-center gap-3 mt-4">
-          <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="px-3 py-1.5 border border-gray-300 rounded-lg disabled:opacity-50 text-black">Previous</button>
-          <span className="text-sm text-gray-600">Page {page} of {totalPages}</span>
-          <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="px-3 py-1.5 border border-gray-300 rounded-lg disabled:opacity-50 text-black">Next</button>
+          <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="px-3 py-1.5 border border-input rounded-lg disabled:opacity-50 text-foreground">Previous</button>
+          <span className="text-sm text-muted-foreground">Page {page} of {totalPages}</span>
+          <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="px-3 py-1.5 border border-input rounded-lg disabled:opacity-50 text-foreground">Next</button>
         </div>
       )}
 
       {confirmDelete && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 max-w-sm w-full">
-            <h2 className="text-lg font-bold text-black mb-2">Delete job</h2>
-            <p className="text-sm text-gray-600 mb-4">
+          <div className="bg-card rounded-lg p-6 max-w-sm w-full">
+            <h2 className="text-lg font-bold text-foreground mb-2">Delete job</h2>
+            <p className="text-sm text-muted-foreground mb-4">
               Delete <span className="font-semibold">{confirmDelete.title}</span> at {confirmDelete.company}?
               This cannot be undone.
             </p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setConfirmDelete(null)} className="px-4 py-2 border border-gray-300 rounded-lg text-black">Cancel</button>
+              <button onClick={() => setConfirmDelete(null)} className="px-4 py-2 border border-input rounded-lg text-foreground">Cancel</button>
               <button
                 onClick={() => deleteMutation.mutate(confirmDelete.id)}
                 disabled={deleteMutation.isPending}

@@ -54,11 +54,9 @@ describe('JobsService', () => {
     });
   });
 
-  it('rejects an invalid list filter without touching the repository', () => {
-    expect(() => service.findAll('user-A', { status: 'HIRED' })).toThrow(
-      BadRequestException,
-    );
-    expect(repo.findAll).not.toHaveBeenCalled();
+  it('forwards a custom status list filter', () => {
+    service.findAll('user-A', { status: 'Phone screen' });
+    expect(repo.findAll).toHaveBeenCalledWith('user-A', { status: 'Phone screen' });
   });
 
   it('validates and forwards parsed data on create', async () => {
@@ -76,18 +74,16 @@ describe('JobsService', () => {
     });
   });
 
-  it('rejects an invalid create, logs the failed extraction, and never hits the DB', () => {
+  it('rejects an invalid create, logs the failed extraction, and never hits the DB', async () => {
     const warn = jest
       .spyOn(Logger.prototype, 'warn')
       .mockImplementation(() => undefined);
-    expect(() =>
-      service.create('user-A', {
+    await expect(service.create('user-A', {
         title: '',
         company: '',
         source: 'linkedin',
         url: 'https://li/1',
-      }),
-    ).toThrow(BadRequestException);
+      })).rejects.toThrow(BadRequestException);
     expect(repo.create).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining('source=linkedin'),
@@ -95,16 +91,16 @@ describe('JobsService', () => {
     warn.mockRestore();
   });
 
-  it('rejects an invalid status without touching the repository', async () => {
+  it('accepts a custom status name for updates', async () => {
     await expect(
-      service.updateStatus('user-A', 'job-1', 'HIRED'),
-    ).rejects.toThrow(BadRequestException);
-    expect(repo.updateStatus).not.toHaveBeenCalled();
+      service.updateStatus('user-A', 'job-1', 'Phone screen'),
+    ).resolves.toEqual({ id: 'job-1' });
+    expect(repo.updateStatus).toHaveBeenCalledWith('user-A', 'job-1', 'Phone screen');
   });
 
-  it('rejects an invalid update payload', async () => {
+  it('rejects a blank update status', async () => {
     await expect(
-      service.update('user-A', 'job-1', { status: 'NOPE' }),
+      service.update('user-A', 'job-1', { status: ' ' }),
     ).rejects.toThrow(BadRequestException);
     expect(repo.update).not.toHaveBeenCalled();
   });

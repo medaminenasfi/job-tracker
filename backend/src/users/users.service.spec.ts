@@ -125,4 +125,30 @@ describe('UsersService', () => {
       expect(query.mock.calls[0][1]).toEqual(['u1']);
     });
   });
+
+  describe('custom statuses', () => {
+    it('creates a custom status after checking duplicate names', async () => {
+      query
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ position: 7 }] })
+        .mockResolvedValueOnce({ rows: [{ id: 's1', name: 'Phone screen' }] });
+
+      await expect(service.createStatus('u1', { name: 'Phone screen' })).resolves.toEqual({
+        id: 's1',
+        name: 'Phone screen',
+      });
+      expect(query.mock.calls[2][0]).toContain('INSERT INTO job_statuses');
+    });
+
+    it('moves jobs to the next status before deleting a status', async () => {
+      query
+        .mockResolvedValueOnce({ rows: [{ name: 'Phone screen' }] })
+        .mockResolvedValueOnce({ rows: [{ name: 'Saved' }] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ id: 's1' }] });
+
+      await expect(service.deleteStatus('u1', 's1')).resolves.toEqual({ deleted: true });
+      expect(query.mock.calls[2][0]).toContain('UPDATE jobs SET status');
+    });
+  });
 });

@@ -23,10 +23,10 @@ export function PasswordInput({
 
   const inputClass = dark
     ? 'w-full border border-slate-600 rounded-lg px-4 py-2.5 pr-12 bg-slate-900 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors'
-    : 'w-full border border-gray-300 rounded-lg px-4 py-2.5 pr-12 text-black placeholder-gray-400 focus:outline-none focus:border-black transition-colors';
+    : 'w-full border border-input rounded-lg px-4 py-2.5 pr-12 text-foreground placeholder-gray-400 focus:outline-none focus:border-ring transition-colors';
   const toggleClass = dark
     ? 'absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-white rounded-md'
-    : 'absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-500 hover:text-black rounded-md';
+    : 'absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-muted-foreground hover:text-foreground rounded-md';
 
   return (
     <div className="relative">

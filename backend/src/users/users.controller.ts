@@ -5,6 +5,9 @@ import {
   Body,
   UseGuards,
   Request,
+  Get,
+  Post,
+  Param,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -41,5 +44,33 @@ export class UsersController {
   @Delete('me')
   deleteAccount(@Request() req: { user: { id: string } }) {
     return this.usersService.deleteAccount(req.user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('statuses')
+  listStatuses(@Request() req: { user: { id: string } }) {
+    return this.usersService.listStatuses(req.user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('statuses')
+  createStatus(@Request() req: { user: { id: string } }, @Body() body: unknown) {
+    return this.usersService.createStatus(req.user.id, body);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('statuses/:id')
+  updateStatus(
+    @Request() req: { user: { id: string } },
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    return this.usersService.updateStatus(req.user.id, id, body);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('statuses/:id')
+  deleteStatus(@Request() req: { user: { id: string } }, @Param('id') id: string) {
+    return this.usersService.deleteStatus(req.user.id, id);
   }
 }

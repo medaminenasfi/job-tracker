@@ -45,7 +45,7 @@ describe('createJobSchema', () => {
     );
   });
 
-  it('rejects an invalid url, source and status', () => {
+  it('rejects an invalid url/source but allows a configured custom status name', () => {
     expect(
       createJobSchema.safeParse({ title: 'T', company: 'C', url: 'not-a-url' })
         .success,
@@ -54,10 +54,7 @@ describe('createJobSchema', () => {
       createJobSchema.safeParse({ title: 'T', company: 'C', source: 'monster' })
         .success,
     ).toBe(false);
-    expect(
-      createJobSchema.safeParse({ title: 'T', company: 'C', status: 'HIRED' })
-        .success,
-    ).toBe(false);
+    expect(createJobSchema.safeParse({ title: 'T', company: 'C', status: 'HIRED' }).success).toBe(true);
   });
 
   it('strips unknown keys so they cannot reach the DB', () => {
@@ -81,8 +78,9 @@ describe('updateJobSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('still rejects an invalid status on patch', () => {
-    expect(updateJobSchema.safeParse({ status: 'NOPE' }).success).toBe(false);
+  it('accepts custom status names on patch but rejects blank values', () => {
+    expect(updateJobSchema.safeParse({ status: 'Phone screen' }).success).toBe(true);
+    expect(updateJobSchema.safeParse({ status: ' ' }).success).toBe(false);
   });
 
   it('turns an empty note into null so a note can be deleted', () => {
@@ -105,11 +103,11 @@ describe('updateJobSchema', () => {
 });
 
 describe('jobStatusSchema', () => {
-  it('accepts every Kanban column and rejects others', () => {
+  it('accepts default and custom names but rejects blanks', () => {
     for (const status of [
       'SAVED',
       'APPLIED',
-      'SCREENING',
+      'ACCEPTED',
       'INTERVIEW',
       'OFFER',
       'REJECTED',
@@ -117,6 +115,7 @@ describe('jobStatusSchema', () => {
     ]) {
       expect(jobStatusSchema.safeParse(status).success).toBe(true);
     }
-    expect(jobStatusSchema.safeParse('applied').success).toBe(false);
+    expect(jobStatusSchema.safeParse('Phone screen').success).toBe(true);
+    expect(jobStatusSchema.safeParse(' ').success).toBe(false);
   });
 });

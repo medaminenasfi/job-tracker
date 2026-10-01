@@ -7,6 +7,7 @@ import { GoogleButton } from '@/components/GoogleButton';
 import { TurnstileField, type TurnstileFieldHandle } from '@/components/TurnstileField';
 import { readUrlError } from '@/lib/auth-errors';
 import Link from 'next/link';
+import { ButtonLoader } from '@/components/ui/Loading';
 
 export default function RegisterPage() {
   const { register } = useAuth();
@@ -41,18 +42,18 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-white px-4">
-      <div className="w-full max-w-md border border-black rounded-2xl p-8 shadow-lg">
+    <div className="min-h-screen flex items-center justify-center bg-background px-4">
+      <div className="w-full max-w-md border border-border bg-card rounded-2xl p-8 shadow-card animate-pop-in">
         <div className="flex items-center gap-3 mb-2">
-          <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" className="text-black">
+          <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" className="text-foreground">
             <path strokeLinecap="round" strokeLinejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM3 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 10.374 21c-2.331 0-4.512-.645-6.374-1.766Z" />
           </svg>
-          <h1 className="text-2xl font-bold text-black">Create your account</h1>
+          <h1 className="text-2xl font-bold text-foreground">Create your account</h1>
         </div>
-        <p className="text-gray-600 mb-6 text-sm">Start tracking your job applications today</p>
+        <p className="text-muted-foreground mb-6 text-sm">Start tracking your job applications today</p>
 
         {error && (
-          <div id="register-error" className="mb-4 p-3 bg-red-50 border border-red-300 rounded-lg text-red-700 text-sm">
+          <div id="register-error" role="alert" className="mb-4 p-3 bg-red-50 dark:bg-red-950 border border-red-300 dark:border-red-800 rounded-lg text-red-700 dark:text-red-300 text-sm">
             {error}
           </div>
         )}
@@ -60,40 +61,40 @@ export default function RegisterPage() {
         <GoogleButton label="Sign up with Google" />
 
         <div className="my-5 flex items-center gap-3">
-          <div className="h-px flex-1 bg-gray-200" />
-          <span className="text-xs text-gray-400">or</span>
-          <div className="h-px flex-1 bg-gray-200" />
+          <div className="h-px flex-1 bg-muted" />
+          <span className="text-xs text-muted-foreground">or</span>
+          <div className="h-px flex-1 bg-muted" />
         </div>
 
         <form id="register-form" onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-black mb-1">Full name</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Full name</label>
             <input
               id="register-name"
               type="text"
               required
               value={name}
               onChange={e => setName(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-black placeholder-gray-400 focus:outline-none focus:border-black transition-colors"
+              className="w-full border border-input rounded-lg px-4 py-2.5 text-foreground placeholder-gray-400 focus:outline-none focus:border-ring transition-colors"
               placeholder="Jane Smith"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-black mb-1">Email</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Email</label>
             <input
               id="register-email"
               type="email"
               required
               value={email}
               onChange={e => setEmail(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-black placeholder-gray-400 focus:outline-none focus:border-black transition-colors"
+              className="w-full border border-input rounded-lg px-4 py-2.5 text-foreground placeholder-gray-400 focus:outline-none focus:border-ring transition-colors"
               placeholder="you@example.com"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-black mb-1">Password</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Password</label>
             <PasswordInput
               id="register-password"
               required
@@ -109,15 +110,15 @@ export default function RegisterPage() {
             id="register-submit"
             type="submit"
             disabled={loading || !token}
-            className="w-full bg-black hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg transition-colors"
+            className="w-full bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg transition-colors"
           >
-            {loading ? 'Creating account...' : token ? 'Create account' : 'Verifying…'}
+            {loading ? <ButtonLoader label="Creating account..." /> : token ? 'Create account' : 'Verifying…'}
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-gray-500">
+        <p className="mt-6 text-center text-sm text-muted-foreground">
           Already have an account?{' '}
-          <Link href="/login" className="text-black font-semibold underline">
+          <Link href="/login" className="text-foreground font-semibold underline">
             Sign in
           </Link>
         </p>

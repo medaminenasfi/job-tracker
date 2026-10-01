@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { apiFetch, setAccessToken, extractMessage, TokenScope } from '@/lib/api';
 import { User } from '@/lib/types';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 interface AuthContextType {
   // User session (drives /dashboard)
@@ -30,6 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [adminUser, setAdminUser] = useState<User | null>(null);
   const [adminLoading, setAdminLoading] = useState(true);
+  const pathname = usePathname();
   const router = useRouter();
 
   // Restores the user session from the refreshToken cookie.
@@ -70,8 +71,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     restoreSession();
-    restoreAdminSession();
-  }, [restoreSession, restoreAdminSession]);
+    const isAdminPanel = pathname === '/admin' || (
+      pathname.startsWith('/admin/') &&
+      pathname !== '/admin/login' &&
+      pathname !== '/admin/register'
+    );
+    if (isAdminPanel) {
+      restoreAdminSession();
+    } else {
+      setAdminLoading(false);
+    }
+  }, [pathname, restoreSession, restoreAdminSession]);
 
   // Re-reads the user profile so derived flags (googleConnected/hasPassword)
   // update in place after a Google link/unlink or a first-password set.

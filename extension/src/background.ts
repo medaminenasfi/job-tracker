@@ -13,7 +13,11 @@ function getToken(): Promise<string | null> {
 async function withToken(fn: (token: string) => Promise<ApiResult>): Promise<ApiResult> {
   const token = await getToken();
   if (!token) return { success: false, error: 'Not logged in' };
-  return fn(token);
+  const result = await fn(token);
+  if (result.error?.startsWith('Session expired')) {
+    await chrome.storage.local.remove('authToken');
+  }
+  return result;
 }
 
 // Auto-detection: resolve the saved job for this page URL, then flip it to APPLIED.

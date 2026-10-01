@@ -4,6 +4,8 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { AdminSidebar } from '@/components/AdminSidebar';
+import { PageTransition } from '@/components/PageTransition';
+import { PageLoader } from '@/components/ui/Loading';
 
 // Client-side convenience guard: keeps non-admins out of the UI. The authoritative
 // boundary is the API's RolesGuard, which returns 403 on every /admin/* call.
@@ -18,16 +20,18 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
   }, [adminLoading, adminUser, router]);
 
   if (adminLoading) {
-    return <div className="p-6 text-gray-500">Loading...</div>;
+    return <PageLoader label="Loading admin workspace..." />;
   }
   if (adminUser?.role !== 'ADMIN') {
-    return <div className="p-6 text-gray-500">Redirecting...</div>;
+    return <PageLoader label="Redirecting to admin sign in..." />;
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="flex min-h-screen bg-background">
       <AdminSidebar />
-      <main className="flex-1 overflow-auto">{children}</main>
+      <main className="min-w-0 flex-1 overflow-auto pt-14 lg:pt-0">
+        <PageTransition>{children}</PageTransition>
+      </main>
     </div>
   );
 }

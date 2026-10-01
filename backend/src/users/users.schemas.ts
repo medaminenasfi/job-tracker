@@ -9,3 +9,11 @@ export const changePasswordSchema = z.object({
 });
 
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
+export const jobStatusCreateSchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  color: z.string().trim().max(30).optional(),
+  position: z.number().int().min(0).optional(),
+});
+
+export const jobStatusUpdateSchema = jobStatusCreateSchema.partial();

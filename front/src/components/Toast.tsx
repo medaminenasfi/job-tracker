@@ -16,10 +16,12 @@ export function Toast({ message, type, onClose }: ToastProps) {
 
   return (
     <div
-      className={`fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg text-white z-50 ${
+      role={type === 'error' ? 'alert' : 'status'}
+      className={`fixed bottom-4 right-4 z-50 flex items-center gap-2 px-5 py-3 rounded-lg shadow-card-hover text-sm font-medium text-white animate-toast-in ${
         type === 'success' ? 'bg-green-600' : 'bg-red-600'
       }`}
     >
+      <span aria-hidden>{type === 'success' ? '✓' : '!'}</span>
       {message}
     </div>
   );

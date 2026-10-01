@@ -1,27 +1,30 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCorners, useDroppable, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
-import { SortableContext, useSortable } from '@dnd-kit/sortable';
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCorners, useDroppable, PointerSensor, KeyboardSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, useSortable, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { snapCenterToCursor } from '@dnd-kit/modifiers';
+import { Plus } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { Job, JobStatus } from '@/lib/types';
+import { DEFAULT_STATUS_NAMES, statusLabel, useJobStatuses } from '@/lib/useJobStatuses';
 import { JobCard } from './JobCard';
 import { AddJobModal } from './AddJobModal';
 import { JobDetailsModal } from './JobDetailsModal';
 import { Toast, useToast } from './Toast';
+import { Skeleton } from './Skeleton';
 import { useState } from 'react';
 
-const COLUMNS: JobStatus[] = ['SAVED', 'APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'REJECTED', 'WITHDRAWN'];
-
+// Per-column tints with matching dark-mode variants (Phase 11.3).
 const COLUMN_COLORS: Record<JobStatus, string> = {
-  SAVED: 'bg-blue-50 border-blue-200',
-  APPLIED: 'bg-yellow-50 border-yellow-200',
-  SCREENING: 'bg-purple-50 border-purple-200',
-  INTERVIEW: 'bg-green-50 border-green-200',
-  OFFER: 'bg-emerald-50 border-emerald-200',
-  REJECTED: 'bg-red-50 border-red-200',
-  WITHDRAWN: 'bg-gray-50 border-gray-200',
+  SAVED: 'bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-900',
+  APPLIED: 'bg-yellow-50 dark:bg-yellow-950 border-yellow-200 dark:border-yellow-900',
+  ACCEPTED: 'bg-purple-50 dark:bg-purple-950 border-purple-200 dark:border-purple-900',
+  INTERVIEW: 'bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-900',
+  OFFER: 'bg-emerald-50 dark:bg-emerald-950 border-emerald-200 dark:border-emerald-900',
+  REJECTED: 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-900',
+  WITHDRAWN: 'bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800',
 };
 
 function SortableJobCard({ job, onViewDetails }: { job: Job; onViewDetails: () => void }) {
@@ -33,6 +36,8 @@ function SortableJobCard({ job, onViewDetails }: { job: Job; onViewDetails: () =
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
+    transformOrigin: 'top left',
+    willChange: 'transform',
   };
 
   return (
@@ -43,7 +48,7 @@ function SortableJobCard({ job, onViewDetails }: { job: Job; onViewDetails: () =
       {...listeners}
       className="cursor-grab active:cursor-grabbing"
     >
-      <JobCard job={job} onViewDetails={onViewDetails} />
+      <JobCard job={job} onViewDetails={onViewDetails} isDragging={isDragging} />
     </div>
   );
 }
@@ -57,7 +62,7 @@ function DroppableColumn({ status, children, className }: { status: JobStatus; c
     <div
       ref={setNodeRef}
       id={`column-${status}`}
-      className={`${className} ${isOver ? 'ring-2 ring-black' : ''}`}
+      className={`${className} transition-shadow ${isOver ? 'ring-2 ring-inset ring-accent' : ''}`}
     >
       {children}
     </div>
@@ -74,12 +79,18 @@ export function KanbanBoard() {
   const [statusFilter, setStatusFilter] = useState<JobStatus | 'ALL'>('ALL');
   const [sourceFilter, setSourceFilter] = useState<string>('ALL');
   const [dateFilter, setDateFilter] = useState<'ALL' | '7days' | '30days' | '90days'>('ALL');
+  const { data: statusConfigs, isLoading: statusesLoading } = useJobStatuses();
+  const columns: JobStatus[] = statusConfigs?.map((status) => status.name) ?? DEFAULT_STATUS_NAMES;
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
         distance: 8,
       },
+    }),
+    // Keyboard drag-and-drop (Phase 11.4) — Space picks up, arrows move.
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
     })
   );
 
@@ -118,6 +129,9 @@ export function KanbanBoard() {
       }
       showToast('Failed to update status', 'error');
     },
+    onSuccess: (_data, variables) => {
+      showToast(`Moved to ${variables.status}`, 'success');
+    },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['jobs'] });
     },
@@ -147,13 +161,30 @@ export function KanbanBoard() {
       return;
     }
 
-    if (COLUMNS.includes(overId as JobStatus) && overId !== job.status) {
+    if (columns.includes(overId as JobStatus) && overId !== job.status) {
       updateStatusMutation.mutate({ jobId, status: overId as JobStatus });
     }
   };
 
-  if (isLoading) {
-    return <div className="text-gray-500">Loading jobs...</div>;
+  if (isLoading || statusesLoading) {
+    // Skeleton columns shaped like the real board (Phase 11.3).
+    return (
+      <div role="status" aria-label="Loading jobs" className="flex max-w-full gap-4 overflow-x-auto pb-2">
+        {columns.map((status) => (
+          <div
+            key={status}
+            className="w-[min(18rem,calc(100vw-2rem))] shrink-0 rounded-lg border border-border bg-card p-3"
+          >
+            <Skeleton className="mb-3 h-4 w-20" />
+            <div className="space-y-2">
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-24 w-full" />
+            </div>
+          </div>
+        ))}
+        <span className="sr-only">Loading jobs…</span>
+      </div>
+    );
   }
 
   if (isError) {
@@ -192,7 +223,7 @@ export function KanbanBoard() {
     return matchesSearch && matchesStatus && matchesSource && matchesDate;
   });
 
-  const jobsByColumn = COLUMNS.reduce((acc, status) => {
+  const jobsByColumn = columns.reduce((acc, status) => {
     acc[status] = filteredJobs.filter((j) => j.status === status);
     return acc;
   }, {} as Record<JobStatus, Job[]>);
@@ -206,59 +237,56 @@ export function KanbanBoard() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200">
-        <div className="flex items-center gap-6">
+      <div className="mb-6 flex flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
           <div className="text-sm">
-            <span className="font-bold text-black">{stats.total}</span>
-            <span className="text-gray-500 ml-1">Total</span>
+            <span className="font-bold text-foreground tabular-nums">{stats.total}</span>
+            <span className="text-muted-foreground ml-1">Total</span>
           </div>
           <div className="text-sm">
-            <span className="font-bold text-black">{stats.applied}</span>
-            <span className="text-gray-500 ml-1">Applied</span>
+            <span className="font-bold text-foreground tabular-nums">{stats.applied}</span>
+            <span className="text-muted-foreground ml-1">Applied</span>
           </div>
           <div className="text-sm">
-            <span className="font-bold text-black">{stats.interviews}</span>
-            <span className="text-gray-500 ml-1">Interviews</span>
+            <span className="font-bold text-foreground tabular-nums">{stats.interviews}</span>
+            <span className="text-muted-foreground ml-1">Interviews</span>
           </div>
           <div className="text-sm">
-            <span className="font-bold text-black">{stats.offers}</span>
-            <span className="text-gray-500 ml-1">Offers</span>
+            <span className="font-bold text-foreground tabular-nums">{stats.offers}</span>
+            <span className="text-muted-foreground ml-1">Offers</span>
           </div>
         </div>
         <button
           onClick={() => setIsAddModalOpen(true)}
-          className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
+          className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
         >
-          + Add Job
+          <Plus className="h-4 w-4" aria-hidden />
+          Add Job
         </button>
       </div>
 
-      <div className="flex items-center gap-4 mb-6">
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
         <input
           type="text"
           placeholder="Search jobs..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="flex-1 border border-gray-300 rounded-lg px-4 py-2 text-black focus:outline-none focus:border-black"
+          className="min-w-0 w-full rounded-lg border border-input px-4 py-2 text-foreground focus:outline-none focus:border-ring"
         />
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as JobStatus | 'ALL')}
-          className="border border-gray-300 rounded-lg px-4 py-2 text-black focus:outline-none focus:border-black"
+          className="min-w-0 w-full rounded-lg border border-input px-4 py-2 text-foreground focus:outline-none focus:border-ring"
         >
           <option value="ALL">All Statuses</option>
-          <option value="SAVED">Saved</option>
-          <option value="APPLIED">Applied</option>
-          <option value="SCREENING">Screening</option>
-          <option value="INTERVIEW">Interview</option>
-          <option value="OFFER">Offer</option>
-          <option value="REJECTED">Rejected</option>
-          <option value="WITHDRAWN">Withdrawn</option>
+          {columns.map((status) => (
+            <option key={status} value={status}>{statusLabel(status)}</option>
+          ))}
         </select>
         <select
           value={sourceFilter}
           onChange={(e) => setSourceFilter(e.target.value)}
-          className="border border-gray-300 rounded-lg px-4 py-2 text-black focus:outline-none focus:border-black"
+          className="min-w-0 w-full rounded-lg border border-input px-4 py-2 text-foreground focus:outline-none focus:border-ring"
         >
           <option value="ALL">All Sources</option>
           <option value="linkedin">LinkedIn</option>
@@ -269,7 +297,7 @@ export function KanbanBoard() {
         <select
           value={dateFilter}
           onChange={(e) => setDateFilter(e.target.value as 'ALL' | '7days' | '30days' | '90days')}
-          className="border border-gray-300 rounded-lg px-4 py-2 text-black focus:outline-none focus:border-black"
+          className="min-w-0 w-full rounded-lg border border-input px-4 py-2 text-foreground focus:outline-none focus:border-ring"
         >
           <option value="ALL">All Time</option>
           <option value="7days">Last 7 days</option>
@@ -279,7 +307,7 @@ export function KanbanBoard() {
       </div>
 
       {filteredJobs.length === 0 && (
-        <div className="mb-4 text-sm text-gray-500">
+        <div className="mb-4 text-sm text-muted-foreground">
           {jobs.length === 0
             ? 'No jobs yet — click "+ Add Job" to get started.'
             : 'No jobs match your search or filters.'}
@@ -287,21 +315,26 @@ export function KanbanBoard() {
       )}
 
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        <div className="flex gap-4 overflow-x-auto pb-4">
-          {COLUMNS.map((status) => (
+        <div className="flex max-w-full gap-4 overflow-x-auto pb-4">
+          {columns.map((status) => (
             <DroppableColumn
               key={status}
               status={status}
-              className={`flex-shrink-0 w-72 ${COLUMN_COLORS[status]} border rounded-lg p-3`}
+              className={`w-[min(18rem,calc(100vw-2rem))] shrink-0 ${COLUMN_COLORS[status] ?? 'bg-muted border-border'} rounded-lg border p-3`}
             >
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-black text-sm">{status}</h3>
-                <span className="text-xs text-gray-500 bg-white px-2 py-0.5 rounded-full">
+                <h3 className="font-semibold text-foreground text-sm">{statusLabel(status)}</h3>
+                <span className="text-xs text-muted-foreground bg-card px-2 py-0.5 rounded-full tabular-nums">
                   {jobsByColumn[status].length}
                 </span>
               </div>
               <SortableContext items={jobsByColumn[status].map((j) => j.id)}>
                 <div className="space-y-2 min-h-[100px]">
+                  {jobsByColumn[status].length === 0 && (
+                    <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+                      Drop a job here
+                    </p>
+                  )}
                   {jobsByColumn[status].map((job) => (
                     <SortableJobCard 
                       key={job.id} 
@@ -315,8 +348,19 @@ export function KanbanBoard() {
           ))}
         </div>
 
-        <DragOverlay>
-          {activeJob ? <JobCard job={activeJob} /> : null}
+        <DragOverlay
+          modifiers={[snapCenterToCursor]}
+          dropAnimation={{
+            duration: 180,
+            easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)',
+          }}
+        >
+          {/* Lifted, slightly rotated ghost while dragging (Phase 11.3). */}
+          {activeJob ? (
+            <div className="w-[min(18rem,calc(100vw-2rem))] origin-top-left rounded-lg shadow-card-hover ring-2 ring-accent">
+              <JobCard job={activeJob} />
+            </div>
+          ) : null}
         </DragOverlay>
       </DndContext>
 

@@ -88,7 +88,7 @@ export class DashboardService {
       total: 0,
       saved: 0,
       applied: 0,
-      screening: 0,
+      accepted: 0,
       interview: 0,
       offer: 0,
       rejected: 0,

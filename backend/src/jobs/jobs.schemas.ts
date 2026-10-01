@@ -1,14 +1,6 @@
 import { z } from 'zod';
 
-export const jobStatusSchema = z.enum([
-  'SAVED',
-  'APPLIED',
-  'SCREENING',
-  'INTERVIEW',
-  'OFFER',
-  'REJECTED',
-  'WITHDRAWN',
-]);
+export const jobStatusSchema = z.string().trim().min(1).max(60);
 
 export const jobSourceSchema = z.enum([
   'linkedin',

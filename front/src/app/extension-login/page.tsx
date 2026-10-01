@@ -73,23 +73,23 @@ export default function ExtensionLoginPage() {
 
   return (
     <main className="min-h-screen flex items-center justify-center p-6">
-      <div className="max-w-md w-full rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
-        <h1 className="text-xl font-bold text-black">Connect the extension</h1>
+      <div className="max-w-md w-full rounded-xl border border-border bg-card p-8 text-center shadow-sm">
+        <h1 className="text-xl font-bold text-foreground">Connect the extension</h1>
         {status === 'working' && (
-          <p className="mt-3 text-sm text-gray-500">Sending your session to the Job Tracker extension…</p>
+          <p className="mt-3 text-sm text-muted-foreground">Sending your session to the Job Tracker extension…</p>
         )}
         {status === 'connected' && (
           <>
             <p className="mt-3 text-sm text-green-600">
               Extension connected. You can now save jobs from any page.
             </p>
-            <a href="/dashboard/jobs" className="mt-4 inline-block text-sm font-medium text-blue-600 hover:underline">
+            <a href="/dashboard/jobs" className="mt-4 inline-block text-sm font-medium text-accent hover:underline">
               Go to dashboard
             </a>
           </>
         )}
         {status === 'no-extension' && (
-          <p className="mt-3 text-sm text-gray-500">
+          <p className="mt-3 text-sm text-muted-foreground">
             Extension not detected. Make sure it is installed and loaded, then reload this page.
           </p>
         )}

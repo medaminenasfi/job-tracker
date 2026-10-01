@@ -2,12 +2,134 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Design tokens (Phase 11.1) — one refined neutral scale + one brand accent.
+   Every token is redefined for dark mode, so semantic utilities
+   (bg-card, text-muted-foreground, border-border, ...) adapt automatically. */
 :root {
-  --background: #ffffff;
-  --foreground: #000000;
+  color-scheme: light;
+  --background: #fafafa;
+  --foreground: #18181b;
+  --card: #ffffff;
+  --card-foreground: #18181b;
+  --muted: #f4f4f5;
+  --muted-foreground: #52525b;
+  --border: #e4e4e7;
+  --input: #d4d4d8;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --ring: #2563eb;
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.08);
+  --shadow-card-hover: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #09090b;
+  --foreground: #fafafa;
+  --card: #18181b;
+  --card-foreground: #fafafa;
+  --muted: #27272a;
+  --muted-foreground: #a1a1aa;
+  --border: #3f3f46;
+  --input: #52525b;
+  --accent: #3b82f6;
+  --accent-hover: #60a5fa;
+  --ring: #60a5fa;
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.5), 0 1px 2px -1px rgb(0 0 0 / 0.5);
+  --shadow-card-hover: 0 10px 15px -3px rgb(0 0 0 / 0.45), 0 4px 6px -4px rgb(0 0 0 / 0.45);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
+}
+
+.job-description-content p {
+  margin: 0 0 1rem;
+}
+.job-description-content p:last-child {
+  margin-bottom: 0;
+}
+.job-description-content h1,
+.job-description-content h2,
+.job-description-content h3,
+.job-description-content h4 {
+  margin: 1.25rem 0 0.5rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.job-description-content h1 { font-size: 1.25rem; }
+.job-description-content h2 { font-size: 1.125rem; }
+.job-description-content h3,
+.job-description-content h4 { font-size: 1rem; }
+.job-description-content ul,
+.job-description-content ol {
+  margin: 0.75rem 0 1rem 1.25rem;
+}
+.job-description-content ul { list-style: disc; }
+.job-description-content ol { list-style: decimal; }
+.job-description-content li { padding-left: 0.25rem; }
+.job-description-content a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.job-description-content hr {
+  margin: 1.25rem 0;
+  border-color: var(--border);
+}
+.job-description-content pre,
+.job-description-content code {
+  max-width: 100%;
+  overflow-x: auto;
+  border-radius: 0.375rem;
+  background: var(--muted);
+  padding: 0.125rem 0.375rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.875em;
+}
+.job-description-content pre {
+  padding: 0.75rem;
+  white-space: pre-wrap;
+}
+
+/* Visible keyboard focus everywhere (Phase 11.4). Mouse clicks stay quiet. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* Skeleton loading shapes (Phase 11.3) — shimmer instead of a plain spinner. */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--muted);
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.45), transparent);
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+.dark .skeleton::after {
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.06), transparent);
+}
+@keyframes skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Phase 11.4 — respect reduced-motion: keep state changes, drop the movement. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

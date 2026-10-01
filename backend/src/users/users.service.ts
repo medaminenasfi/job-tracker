@@ -5,11 +5,111 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { DbService } from '../db/db.service';
-import { changePasswordSchema } from './users.schemas';
+import {
+  changePasswordSchema,
+  jobStatusCreateSchema,
+  jobStatusUpdateSchema,
+} from './users.schemas';
 
 @Injectable()
 export class UsersService {
   constructor(private db: DbService) {}
+
+  async listStatuses(userId: string) {
+    await this.ensureDefaultStatuses(userId);
+    const result = await this.db.query(
+      'SELECT id, name, color, position, is_default FROM job_statuses WHERE user_id = $1 ORDER BY position, created_at',
+      [userId],
+    );
+    return result.rows;
+  }
+
+  async createStatus(userId: string, data: unknown) {
+    const parsed = jobStatusCreateSchema.safeParse(data ?? {});
+    if (!parsed.success) throw new BadRequestException(parsed.error.issues[0]?.message ?? 'Invalid status');
+    const existing = await this.db.query(
+      'SELECT id FROM job_statuses WHERE user_id = $1 AND lower(name) = lower($2)',
+      [userId, parsed.data.name],
+    );
+    if (existing.rows.length) throw new BadRequestException('A status with this name already exists');
+    const position = await this.db.query(
+      'SELECT COALESCE(MAX(position), -1) + 1 AS position FROM job_statuses WHERE user_id = $1',
+      [userId],
+    );
+    const result = await this.db.query(
+      'INSERT INTO job_statuses (user_id, name, color, position, is_default) VALUES ($1, $2, $3, $4, false) RETURNING id, name, color, position, is_default',
+      [userId, parsed.data.name, parsed.data.color ?? 'slate', position.rows[0].position],
+    );
+    return result.rows[0];
+  }
+
+  async updateStatus(userId: string, id: string, data: unknown) {
+    const parsed = jobStatusUpdateSchema.safeParse(data ?? {});
+    if (!parsed.success || Object.keys(parsed.data).length === 0) {
+      throw new BadRequestException('Invalid status update');
+    }
+    const fields: string[] = [];
+    const values: unknown[] = [];
+    const current = await this.db.query(
+      'SELECT name, is_default FROM job_statuses WHERE user_id = $1 AND id = $2',
+      [userId, id],
+    );
+    if (!current.rows[0]) throw new BadRequestException('Status not found');
+    if (parsed.data.name !== undefined && parsed.data.name !== current.rows[0].name) {
+      const duplicate = await this.db.query(
+        'SELECT id FROM job_statuses WHERE user_id = $1 AND lower(name) = lower($2) AND id <> $3',
+        [userId, parsed.data.name, id],
+      );
+      if (duplicate.rows.length) throw new BadRequestException('A status with this name already exists');
+      await this.db.query('UPDATE jobs SET status = $1 WHERE user_id = $2 AND status = $3', [parsed.data.name, userId, current.rows[0].name]);
+    }
+    if (parsed.data.name !== undefined) { fields.push(`name = $${fields.length + 1}`); values.push(parsed.data.name); }
+    if (parsed.data.color !== undefined) { fields.push(`color = $${fields.length + 1}`); values.push(parsed.data.color); }
+    if (parsed.data.position !== undefined) { fields.push(`position = $${fields.length + 1}`); values.push(parsed.data.position); }
+    values.push(userId, id);
+    const result = await this.db.query(
+      `UPDATE job_statuses SET ${fields.join(', ')}, updated_at = now() WHERE user_id = $${fields.length + 1} AND id = $${fields.length + 2} RETURNING id, name, color, position, is_default`,
+      values,
+    );
+    return result.rows[0];
+  }
+
+  async deleteStatus(userId: string, id: string) {
+    const status = await this.db.query(
+      'SELECT name FROM job_statuses WHERE user_id = $1 AND id = $2',
+      [userId, id],
+    );
+    if (!status.rows[0]) throw new BadRequestException('Status not found');
+    const replacement = await this.db.query(
+      'SELECT name FROM job_statuses WHERE user_id = $1 AND id <> $2 ORDER BY position, created_at LIMIT 1',
+      [userId, id],
+    );
+    if (!replacement.rows[0]) throw new BadRequestException('Keep at least one status');
+    await this.db.query(
+      'UPDATE jobs SET status = $1, updated_at = now() WHERE user_id = $2 AND status = $3',
+      [replacement.rows[0].name, userId, status.rows[0].name],
+    );
+    const result = await this.db.query(
+      'DELETE FROM job_statuses WHERE user_id = $1 AND id = $2 RETURNING id',
+      [userId, id],
+    );
+    if (!result.rows[0]) throw new BadRequestException('Status not found');
+    return { deleted: true };
+  }
+
+  private async ensureDefaultStatuses(userId: string) {
+    const existing = await this.db.query('SELECT 1 FROM job_statuses WHERE user_id = $1 LIMIT 1', [userId]);
+    if (existing.rows.length) return;
+    await this.db.query(`
+      INSERT INTO job_statuses (user_id, name, color, position, is_default)
+      SELECT $1, defaults.name, defaults.color, defaults.position, true
+      FROM (VALUES
+        ('SAVED', 'sky', 0), ('APPLIED', 'blue', 1), ('ACCEPTED', 'violet', 2),
+        ('INTERVIEW', 'amber', 3), ('OFFER', 'emerald', 4), ('REJECTED', 'rose', 5),
+        ('WITHDRAWN', 'slate', 6)
+      ) AS defaults(name, color, position)
+    `, [userId]);
+  }
 
   async updateProfile(userId: string, data: { name?: string; email?: string }) {
     const { name, email } = data;

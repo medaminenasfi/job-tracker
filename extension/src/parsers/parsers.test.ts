@@ -9,6 +9,15 @@ function doc(html: string): Document {
 }
 
 describe('parseLinkedIn', () => {
+  it('cleans LinkedIn page titles and derives the company suffix', () => {
+    const d = doc('<title>## Mid-Senior Frontend Engineer - Design System | Yassir | LinkedIn</title>');
+
+    expect(parseLinkedIn(d)).toMatchObject({
+      title: 'Mid-Senior Frontend Engineer - Design System',
+      company: 'Yassir',
+    });
+  });
+
   it('extracts title, company and location', () => {
     const d = doc(`
       <h1 class="top-card-layout__title">Senior Frontend Engineer</h1>
@@ -43,6 +52,34 @@ describe('parseLinkedIn', () => {
     expect(result.title).toBe('Staff Engineer');
     expect(result.company).toBe('Acme');
     expect(result.location).toBe('Remote');
+  });
+
+  it('reads location from the modern primary description container', () => {
+    const d = doc(`
+      <div class="job-details-jobs-unified-top-card">
+        <h1 class="job-details-jobs-unified-top-card__job-title">Frontend Engineer</h1>
+        <a class="job-details-jobs-unified-top-card__company-name">Yassir</a>
+        <div class="job-details-jobs-unified-top-card__primary-description-container">
+          <span>Yassir</span>
+          <span>Algiers, Algeria</span>
+          <span>234 applicants</span>
+        </div>
+      </div>
+    `);
+
+    expect(parseLinkedIn(d).location).toBe('Algiers, Algeria');
+  });
+
+  it('extracts the first location before LinkedIn metadata separators', () => {
+    const d = doc(`
+      <h1 class="top-card-layout__title">Senior Full Stack Developer (Angular/Java)</h1>
+      <a class="topcard__org-name-link">RGI Group</a>
+      <div class="top-card-layout__second-subline">
+        Tunis, Tunis, Tunisia · 2 months ago · Over 100 people clicked apply
+      </div>
+    `);
+
+    expect(parseLinkedIn(d).location).toBe('Tunis, Tunis, Tunisia');
   });
 });
 
@@ -79,6 +116,21 @@ describe('parseIndeed', () => {
       company: 'Initech',
       location: 'Austin, TX',
       source: 'indeed',
+    });
+  });
+
+  it('finds modern Indeed company and location markup', () => {
+    const d = doc(`
+      <h1>Application/Software Developer</h1>
+      <a class="resultContent-company">Illumination Works LLC</a>
+      <div class="jobsearch-JobInfoHeader-subtitle-location">United States</div>
+      <div class="jobsearch-JobInfoHeader-subtitle-location">Remote</div>
+    `);
+
+    expect(parseIndeed(d)).toMatchObject({
+      title: 'Application/Software Developer',
+      company: 'Illumination Works LLC',
+      location: 'United States',
     });
   });
 });

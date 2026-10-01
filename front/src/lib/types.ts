@@ -14,13 +14,15 @@ export interface User {
 }
 
 export type JobStatus =
-  | 'SAVED'
-  | 'APPLIED'
-  | 'SCREENING'
-  | 'INTERVIEW'
-  | 'OFFER'
-  | 'REJECTED'
-  | 'WITHDRAWN';
+  | string;
+
+export interface JobStatusConfig {
+  id: string;
+  name: string;
+  color: string;
+  position: number;
+  is_default: boolean;
+}
 
 export interface Job {
   id: string;
@@ -123,7 +125,7 @@ export interface DashboardSummary {
     total: number;
     saved: number;
     applied: number;
-    screening: number;
+    accepted: number;
     interview: number;
     offer: number;
     rejected: number;

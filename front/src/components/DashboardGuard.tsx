@@ -4,6 +4,8 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { Sidebar } from '@/components/Sidebar';
+import { PageTransition } from '@/components/PageTransition';
+import { PageLoader } from '@/components/ui/Loading';
 
 // Client-side guard for the /dashboard area. It withholds the page content until
 // the user session has been restored from the refreshToken cookie, so data
@@ -21,16 +23,18 @@ export function DashboardGuard({ children }: { children: React.ReactNode }) {
   }, [loading, user, router]);
 
   if (loading) {
-    return <div className="p-6 text-gray-500">Loading...</div>;
+    return <PageLoader label="Loading your workspace..." />;
   }
   if (!user) {
-    return <div className="p-6 text-gray-500">Redirecting...</div>;
+    return <PageLoader label="Redirecting to sign in..." />;
   }
 
   return (
-    <div className="flex min-h-screen bg-white">
+    <div className="flex min-h-screen bg-background">
       <Sidebar />
-      <main className="flex-1 overflow-auto">{children}</main>
+      <main className="min-w-0 flex-1 overflow-auto pt-14 lg:pt-0">
+        <PageTransition>{children}</PageTransition>
+      </main>
     </div>
   );
 }

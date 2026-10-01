@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiJson } from '@/lib/api';
 import { AdminStats } from '@/lib/types';
+import { useCountUp } from '@/lib/useCountUp';
 
 export default function AdminOverviewPage() {
   const { data, isLoading, isError, error } = useQuery({
@@ -10,7 +11,7 @@ export default function AdminOverviewPage() {
     queryFn: () => apiJson<AdminStats>('/api/admin/stats'),
   });
 
-  if (isLoading) return <div className="p-6 text-gray-500">Loading...</div>;
+  if (isLoading) return <div className="p-6 text-muted-foreground">Loading...</div>;
   if (isError) {
     return (
       <div className="p-6 text-red-600" role="alert">
@@ -26,47 +27,50 @@ export default function AdminOverviewPage() {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-black">Overview</h1>
-        <p className="text-gray-500 text-sm mt-1">Platform-wide statistics</p>
+        <h1 className="text-2xl font-bold text-foreground">Overview</h1>
+        <p className="text-muted-foreground text-sm mt-1">Platform-wide statistics</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard value={data.totalUsers} label="Total users" />
-        <StatCard value={data.newUsersThisWeek} label="New this week" accent="text-blue-600" />
+        <StatCard value={data.newUsersThisWeek} label="New this week" accent="text-accent" />
         <StatCard value={data.totalJobs} label="Total jobs" accent="text-indigo-600" />
         <StatCard value={statusCount('OFFER')} label="Offers" accent="text-emerald-600" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white border border-gray-200 rounded-lg p-6">
-          <h2 className="text-lg font-bold text-black mb-4">Signups per week</h2>
+        <div className="bg-card border border-border rounded-lg p-6">
+          <h2 className="text-lg font-bold text-foreground mb-4">Signups per week</h2>
           {data.signupsPerWeek.length === 0 ? (
-            <p className="text-gray-500 text-sm">No signups in the last 8 weeks.</p>
+            <p className="text-muted-foreground text-sm">No signups in the last 8 weeks.</p>
           ) : (
             <div className="flex items-end gap-2 h-40">
-              {data.signupsPerWeek.map((w) => (
+              {data.signupsPerWeek.map((w, index) => (
                 <div key={w.week} className="flex-1 flex flex-col items-center gap-1">
-                  <span className="text-xs text-gray-600">{w.count}</span>
+                  <span className="text-xs text-muted-foreground tabular-nums">{w.count}</span>
                   <div
-                    className="w-full bg-indigo-500 rounded-t"
-                    style={{ height: `${(w.count / maxSignups) * 100}%` }}
+                    className="w-full bg-accent rounded-t origin-bottom animate-bar-grow"
+                    style={{
+                      height: `${(w.count / maxSignups) * 100}%`,
+                      animationDelay: `${index * 60}ms`,
+                    }}
                     title={`${w.week}: ${w.count}`}
                   />
-                  <span className="text-[10px] text-gray-400">{w.week.slice(5)}</span>
+                  <span className="text-[10px] text-muted-foreground">{w.week.slice(5)}</span>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-lg p-6">
-          <h2 className="text-lg font-bold text-black mb-4">Jobs by status</h2>
+        <div className="bg-card border border-border rounded-lg p-6">
+          <h2 className="text-lg font-bold text-foreground mb-4">Jobs by status</h2>
           <div className="space-y-3">
-            {['SAVED', 'APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'REJECTED', 'WITHDRAWN'].map(
+            {['SAVED', 'APPLIED', 'ACCEPTED', 'INTERVIEW', 'OFFER', 'REJECTED', 'WITHDRAWN'].map(
               (s) => (
                 <div key={s} className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">{s}</span>
-                  <span className="font-medium text-black">{statusCount(s)}</span>
+                  <span className="text-sm text-muted-foreground">{s}</span>
+                  <span className="font-medium text-foreground">{statusCount(s)}</span>
                 </div>
               ),
             )}
@@ -77,11 +81,12 @@ export default function AdminOverviewPage() {
   );
 }
 
-function StatCard({ value, label, accent = 'text-black' }: { value: number; label: string; accent?: string }) {
+function StatCard({ value, label, accent = 'text-foreground' }: { value: number; label: string; accent?: string }) {
+  const display = useCountUp(value);
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-6">
-      <div className={`text-3xl font-bold ${accent}`}>{value}</div>
-      <div className="text-sm text-gray-500 mt-1">{label}</div>
+    <div className="bg-card border border-border rounded-lg p-6 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card-hover">
+      <div className={`text-3xl font-bold tabular-nums ${accent}`}>{display}</div>
+      <div className="text-sm text-muted-foreground mt-1">{label}</div>
     </div>
   );
 }

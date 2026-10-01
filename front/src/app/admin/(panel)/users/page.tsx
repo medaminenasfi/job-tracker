@@ -55,8 +55,8 @@ export default function AdminUsersPage() {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-black">Users</h1>
-        <p className="text-gray-500 text-sm mt-1">Search, filter and manage every account</p>
+        <h1 className="text-2xl font-bold text-foreground">Users</h1>
+        <p className="text-muted-foreground text-sm mt-1">Search, filter and manage every account</p>
       </div>
 
       <div className="flex flex-wrap gap-3 mb-4">
@@ -65,12 +65,12 @@ export default function AdminUsersPage() {
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           placeholder="Search name or email"
-          className="border border-gray-300 rounded-lg px-4 py-2 text-black focus:outline-none focus:border-black"
+          className="border border-input rounded-lg px-4 py-2 text-foreground focus:outline-none focus:border-ring"
         />
         <select
           value={role}
           onChange={(e) => { setRole(e.target.value); setPage(1); }}
-          className="border border-gray-300 rounded-lg px-4 py-2 text-black focus:outline-none focus:border-black"
+          className="border border-input rounded-lg px-4 py-2 text-foreground focus:outline-none focus:border-ring"
         >
           <option value="">All roles</option>
           <option value="USER">USER</option>
@@ -79,7 +79,7 @@ export default function AdminUsersPage() {
         <select
           value={status}
           onChange={(e) => { setStatus(e.target.value); setPage(1); }}
-          className="border border-gray-300 rounded-lg px-4 py-2 text-black focus:outline-none focus:border-black"
+          className="border border-input rounded-lg px-4 py-2 text-foreground focus:outline-none focus:border-ring"
         >
           <option value="">All statuses</option>
           <option value="ACTIVE">ACTIVE</option>
@@ -87,7 +87,7 @@ export default function AdminUsersPage() {
         </select>
       </div>
 
-      {isLoading && <div className="text-gray-500">Loading...</div>}
+      {isLoading && <div className="text-muted-foreground">Loading...</div>}
       {isError && (
         <div className="text-red-600" role="alert">
           Failed to load users: {error instanceof Error ? error.message : 'unknown error'}
@@ -95,15 +95,15 @@ export default function AdminUsersPage() {
       )}
 
       {data && data.data.length === 0 && (
-        <div className="text-gray-500 bg-white border border-gray-200 rounded-lg p-6">
+        <div className="text-muted-foreground bg-card border border-border rounded-lg p-6">
           No users match your search or filters.
         </div>
       )}
 
       {data && data.data.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
+        <div className="bg-card border border-border rounded-lg overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-600 text-left">
+            <thead className="bg-muted text-muted-foreground text-left">
               <tr>
                 <th className="px-4 py-3 font-medium">Name</th>
                 <th className="px-4 py-3 font-medium">Email</th>
@@ -116,11 +116,11 @@ export default function AdminUsersPage() {
             </thead>
             <tbody>
               {data.data.map((u) => (
-                <tr key={u.id} className="border-t border-gray-100">
-                  <td className="px-4 py-3 text-black">{u.name}</td>
-                  <td className="px-4 py-3 text-gray-600">{u.email}</td>
+                <tr key={u.id} className="border-t border-border">
+                  <td className="px-4 py-3 text-foreground">{u.name}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${u.role === 'ADMIN' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-700'}`}>
+                    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${u.role === 'ADMIN' ? 'bg-indigo-100 text-indigo-700' : 'bg-muted text-foreground'}`}>
                       {u.role}
                     </span>
                   </td>
@@ -129,11 +129,11 @@ export default function AdminUsersPage() {
                       {u.account_status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{u.job_count}</td>
-                  <td className="px-4 py-3 text-gray-500">{new Date(u.created_at).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{u.job_count}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{new Date(u.created_at).toLocaleDateString()}</td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-2">
-                      <Link href={`/admin/users/${u.id}`} className="text-blue-600 hover:underline">View</Link>
+                      <Link href={`/admin/users/${u.id}`} className="text-accent hover:underline">View</Link>
                       <button
                         onClick={() => statusMutation.mutate({ id: u.id, next: u.account_status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE' })}
                         className="text-amber-600 hover:underline"
@@ -166,15 +166,15 @@ export default function AdminUsersPage() {
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             disabled={page <= 1}
-            className="px-3 py-1.5 border border-gray-300 rounded-lg disabled:opacity-50 text-black"
+            className="px-3 py-1.5 border border-input rounded-lg disabled:opacity-50 text-foreground"
           >
             Previous
           </button>
-          <span className="text-sm text-gray-600">Page {page} of {totalPages}</span>
+          <span className="text-sm text-muted-foreground">Page {page} of {totalPages}</span>
           <button
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages}
-            className="px-3 py-1.5 border border-gray-300 rounded-lg disabled:opacity-50 text-black"
+            className="px-3 py-1.5 border border-input rounded-lg disabled:opacity-50 text-foreground"
           >
             Next
           </button>
@@ -183,14 +183,14 @@ export default function AdminUsersPage() {
 
       {confirmDelete && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 max-w-sm w-full">
-            <h2 className="text-lg font-bold text-black mb-2">Delete user</h2>
-            <p className="text-sm text-gray-600 mb-4">
+          <div className="bg-card rounded-lg p-6 max-w-sm w-full">
+            <h2 className="text-lg font-bold text-foreground mb-2">Delete user</h2>
+            <p className="text-sm text-muted-foreground mb-4">
               Permanently delete <span className="font-semibold">{confirmDelete.email}</span> and all
               their jobs? This cannot be undone.
             </p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setConfirmDelete(null)} className="px-4 py-2 border border-gray-300 rounded-lg text-black">
+              <button onClick={() => setConfirmDelete(null)} className="px-4 py-2 border border-input rounded-lg text-foreground">
                 Cancel
               </button>
               <button
