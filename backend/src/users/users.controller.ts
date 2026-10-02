@@ -54,7 +54,10 @@ export class UsersController {
 
   @UseGuards(JwtAuthGuard)
   @Post('statuses')
-  createStatus(@Request() req: { user: { id: string } }, @Body() body: unknown) {
+  createStatus(
+    @Request() req: { user: { id: string } },
+    @Body() body: unknown,
+  ) {
     return this.usersService.createStatus(req.user.id, body);
   }
 
@@ -70,7 +73,10 @@ export class UsersController {
 
   @UseGuards(JwtAuthGuard)
   @Delete('statuses/:id')
-  deleteStatus(@Request() req: { user: { id: string } }, @Param('id') id: string) {
+  deleteStatus(
+    @Request() req: { user: { id: string } },
+    @Param('id') id: string,
+  ) {
     return this.usersService.deleteStatus(req.user.id, id);
   }
 }

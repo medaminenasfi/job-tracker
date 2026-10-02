@@ -7,15 +7,17 @@ import {
 } from '@nestjs/common';
 import { DbService } from '../db/db.service';
 import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
 import { hashToken } from './token-hash';
 import { JwtService } from '@nestjs/jwt';
 import { Response } from 'express';
-import { loginSchema, registerSchema } from './auth.schemas';
 import {
-  CookieSpec,
-  USER_COOKIE,
-  refreshCookieOptions,
-} from './auth.cookies';
+  loginSchema,
+  registerSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+} from './auth.schemas';
+import { CookieSpec, USER_COOKIE, refreshCookieOptions } from './auth.cookies';
 
 @Injectable()
 export class AuthService {
@@ -56,6 +58,91 @@ export class AuthService {
       [user.id],
     );
     return this.issueSession(user.id, user.role ?? 'USER', res);
+  }
+
+  async forgotPassword(data: unknown) {
+    const parsed = forgotPasswordSchema.safeParse(data);
+    if (!parsed.success) {
+      throw new BadRequestException(
+        parsed.error.issues[0]?.message ?? 'Invalid input',
+      );
+    }
+    const { email } = parsed.data;
+    const userResult = await this.db.query(
+      'SELECT id, email, account_status FROM users WHERE email = $1',
+      [email],
+    );
+    const user = userResult.rows[0];
+
+    // Always return success even if user not found to prevent user enumeration
+    if (!user || user.account_status === 'SUSPENDED') {
+      return {
+        message:
+          'If that email is registered, password reset instructions have been generated.',
+      };
+    }
+
+    // Invalidate existing active tokens for this user
+    await this.db.query(
+      'DELETE FROM password_reset_tokens WHERE user_id = $1',
+      [user.id],
+    );
+
+    const rawToken = randomBytes(32).toString('hex');
+    const tokenHash = this.hashToken(rawToken);
+
+    await this.db.query(
+      "INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, now() + interval '1 hour')",
+      [user.id, tokenHash],
+    );
+
+    return {
+      message:
+        'If that email is registered, password reset instructions have been generated.',
+      // In development or when email service is absent, provide the resetToken for convenient testing
+      resetToken: process.env.NODE_ENV !== 'production' ? rawToken : undefined,
+    };
+  }
+
+  async resetPassword(data: unknown) {
+    const parsed = resetPasswordSchema.safeParse(data);
+    if (!parsed.success) {
+      throw new BadRequestException(
+        parsed.error.issues[0]?.message ?? 'Invalid input',
+      );
+    }
+    const { token, password } = parsed.data;
+    const tokenHash = this.hashToken(token);
+
+    const tokenResult = await this.db.query(
+      'SELECT * FROM password_reset_tokens WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now()',
+      [tokenHash],
+    );
+    const resetRecord = tokenResult.rows[0];
+    if (!resetRecord) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Update user password and mark token as used
+    await this.db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [
+      passwordHash,
+      resetRecord.user_id,
+    ]);
+    await this.db.query(
+      'UPDATE password_reset_tokens SET used_at = now() WHERE id = $1',
+      [resetRecord.id],
+    );
+
+    // Invalidate all active refresh tokens for this user
+    await this.db.query('DELETE FROM refresh_tokens WHERE user_id = $1', [
+      resetRecord.user_id,
+    ]);
+
+    return {
+      message: 'Password has been successfully reset. You can now log in.',
+    };
   }
 
   // Shared credential check reused by /auth/login and /admin/auth/login so the

@@ -40,7 +40,7 @@ const html = `<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="color-scheme" content="light dark" />
+    <meta name="color-scheme" content="light" />
     <title>Job Tracker popup — design preview</title>
     <style>
 ${css}

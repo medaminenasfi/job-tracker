@@ -64,10 +64,24 @@ export default function DashboardPage() {
   const totalForBars = Math.max(1, counts.total);
 
   return (
-    <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-        <p className="text-muted-foreground text-sm mt-1">Welcome back, {user?.name}</p>
+    <div className="p-4 sm:p-6 lg:p-8 space-y-8">
+      {/* Welcome Header */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-border/80 pb-5">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+            Welcome back, {user?.name || 'Candidate'}
+          </h1>
+          <p className="text-muted-foreground text-xs sm:text-sm mt-1">
+            Here is what is happening across your job search pipeline today.
+          </p>
+        </div>
+        <Link
+          href="/dashboard/jobs"
+          className="inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-accent/25 transition-all hover:bg-accent-hover hover:shadow hover:scale-[1.01] self-start sm:self-auto"
+        >
+          <span>Open Kanban Board</span>
+          <span>→</span>
+        </Link>
       </div>
 
       <GettingStartedChecklist checklist={checklist} />
@@ -76,11 +90,11 @@ export default function DashboardPage() {
         <EmptyState />
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            <StatCard value={counts.total} label="Total Jobs" />
-            <StatCard value={counts.applied} label="Applied" accent="text-accent" />
-            <StatCard value={counts.interview} label="Interviews" accent="text-green-600" />
-            <StatCard value={counts.offer} label="Offers" accent="text-emerald-600" />
+          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+            <StatCard value={counts.total} label="Total Tracked" icon="∑" />
+            <StatCard value={counts.applied} label="Applications Sent" icon="⚡" accent="text-amber-700 dark:text-amber-300" />
+            <StatCard value={counts.interview} label="Active Interviews" icon="💬" accent="text-green-700 dark:text-green-300" />
+            <StatCard value={counts.offer} label="Job Offers" icon="🎉" accent="text-emerald-700 dark:text-emerald-300" />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
@@ -161,19 +175,31 @@ export default function DashboardPage() {
 function StatCard({
   value,
   label,
+  icon,
   accent = 'text-foreground',
 }: {
   value: number;
   label: string;
+  icon?: React.ReactNode;
   accent?: string;
 }) {
   const display = useCountUp(value);
   return (
-    <div className="group bg-card border border-border rounded-lg p-6 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card-hover">
-      <div className={`text-3xl font-bold tabular-nums ${accent}`} data-testid="stat-value">
-        {display}
+    <div className="group bg-card border border-border rounded-xl p-5 shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card-hover sm:p-6">
+      <div className="flex items-start justify-between gap-2">
+        <div className={`text-2xl font-bold tabular-nums sm:text-3xl ${accent}`} data-testid="stat-value">
+          {display}
+        </div>
+        {icon && (
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-base"
+            aria-hidden
+          >
+            {icon}
+          </span>
+        )}
       </div>
-      <div className="text-sm text-muted-foreground mt-1">{label}</div>
+      <div className="mt-1.5 text-sm text-muted-foreground">{label}</div>
     </div>
   );
 }

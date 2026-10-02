@@ -94,6 +94,7 @@ export class JobsService {
       'SELECT 1 FROM job_statuses WHERE user_id = $1 AND name = $2',
       [userId, status],
     );
-    if (!result.rows[0]) throw new BadRequestException('Status is not configured for this user');
+    if (!result.rows[0])
+      throw new BadRequestException('Status is not configured for this user');
   }
 }

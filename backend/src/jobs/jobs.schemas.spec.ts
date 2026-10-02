@@ -54,7 +54,10 @@ describe('createJobSchema', () => {
       createJobSchema.safeParse({ title: 'T', company: 'C', source: 'monster' })
         .success,
     ).toBe(false);
-    expect(createJobSchema.safeParse({ title: 'T', company: 'C', status: 'HIRED' }).success).toBe(true);
+    expect(
+      createJobSchema.safeParse({ title: 'T', company: 'C', status: 'HIRED' })
+        .success,
+    ).toBe(true);
   });
 
   it('strips unknown keys so they cannot reach the DB', () => {
@@ -79,7 +82,9 @@ describe('updateJobSchema', () => {
   });
 
   it('accepts custom status names on patch but rejects blank values', () => {
-    expect(updateJobSchema.safeParse({ status: 'Phone screen' }).success).toBe(true);
+    expect(updateJobSchema.safeParse({ status: 'Phone screen' }).success).toBe(
+      true,
+    );
     expect(updateJobSchema.safeParse({ status: ' ' }).success).toBe(false);
   });
 

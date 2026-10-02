@@ -69,7 +69,9 @@ export class DashboardService {
       activity: {
         appliedThisWeek: activity.week ?? 0,
         appliedThisMonth: activity.month ?? 0,
-        last7Days: this.toSparkline(sparkRes.rows as { day: string; count: number }[]),
+        last7Days: this.toSparkline(
+          sparkRes.rows as { day: string; count: number }[],
+        ),
       },
       recentJobs: recentRes.rows,
       checklist: {

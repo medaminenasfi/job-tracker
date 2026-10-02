@@ -56,7 +56,9 @@ describe('JobsService', () => {
 
   it('forwards a custom status list filter', () => {
     service.findAll('user-A', { status: 'Phone screen' });
-    expect(repo.findAll).toHaveBeenCalledWith('user-A', { status: 'Phone screen' });
+    expect(repo.findAll).toHaveBeenCalledWith('user-A', {
+      status: 'Phone screen',
+    });
   });
 
   it('validates and forwards parsed data on create', async () => {
@@ -78,12 +80,14 @@ describe('JobsService', () => {
     const warn = jest
       .spyOn(Logger.prototype, 'warn')
       .mockImplementation(() => undefined);
-    await expect(service.create('user-A', {
+    await expect(
+      service.create('user-A', {
         title: '',
         company: '',
         source: 'linkedin',
         url: 'https://li/1',
-      })).rejects.toThrow(BadRequestException);
+      }),
+    ).rejects.toThrow(BadRequestException);
     expect(repo.create).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining('source=linkedin'),
@@ -95,7 +99,11 @@ describe('JobsService', () => {
     await expect(
       service.updateStatus('user-A', 'job-1', 'Phone screen'),
     ).resolves.toEqual({ id: 'job-1' });
-    expect(repo.updateStatus).toHaveBeenCalledWith('user-A', 'job-1', 'Phone screen');
+    expect(repo.updateStatus).toHaveBeenCalledWith(
+      'user-A',
+      'job-1',
+      'Phone screen',
+    );
   });
 
   it('rejects a blank update status', async () => {

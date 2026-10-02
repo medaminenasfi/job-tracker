@@ -154,4 +154,76 @@ describe('AuthService', () => {
       expect.anything(),
     );
   });
+
+  it('handles forgotPassword by inserting token into db', async () => {
+    query
+      .mockResolvedValueOnce({
+        rows: [
+          { id: 'user-1', email: 'ada@example.com', account_status: 'ACTIVE' },
+        ],
+      })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const result = await service.forgotPassword({ email: 'ada@example.com' });
+    expect(result.message).toContain('If that email is registered');
+    expect(query).toHaveBeenCalledWith(
+      'DELETE FROM password_reset_tokens WHERE user_id = $1',
+      ['user-1'],
+    );
+  });
+
+  it('handles resetPassword and updates password hash', async () => {
+    query
+      .mockResolvedValueOnce({ rows: [{ id: 'token-1', user_id: 'user-1' }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] });
+
+    const result = await service.resetPassword({
+      token: 'raw-token',
+      password: 'new-password-123',
+    });
+    expect(result.message).toContain('successfully reset');
+    expect(query).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE users SET password_hash = $1'),
+      [expect.any(String), 'user-1'],
+    );
+  });
+
+  it('returns the same generic message for unknown emails without storing a token', async () => {
+    query.mockResolvedValueOnce({ rows: [] });
+
+    const result = await service.forgotPassword({
+      email: 'nobody@example.com',
+    });
+
+    expect(result.message).toContain('If that email is registered');
+    expect(result.resetToken).toBeUndefined();
+    // Only the lookup ran — no token row for a non-existent user (no enumeration).
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects invalid forgot-password payloads', async () => {
+    await expect(
+      service.forgotPassword({ email: 'not-an-email' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('rejects reset attempts with an unknown, used or expired token', async () => {
+    query.mockResolvedValueOnce({ rows: [] });
+
+    await expect(
+      service.resetPassword({ token: 'stale-token', password: 'new-secret-1' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects invalid reset-password payloads before touching the database', async () => {
+    await expect(
+      service.resetPassword({ token: 'raw-token', password: 'short' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(query).not.toHaveBeenCalled();
+  });
 });

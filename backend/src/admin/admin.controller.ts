@@ -42,10 +42,7 @@ export class AdminController {
   }
 
   @Post('users')
-  createUser(
-    @Request() req: { user: { id: string } },
-    @Body() body: unknown,
-  ) {
+  createUser(@Request() req: { user: { id: string } }, @Body() body: unknown) {
     return this.adminService.createUser(this.adminId(req), body);
   }
 

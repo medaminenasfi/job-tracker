@@ -252,47 +252,73 @@ export function KanbanBoard() {
   };
 
   return (
-    <div>
-      <div className="mb-6 flex flex-col gap-4 border-b border-border pb-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-          <div className="text-sm">
-            <span className="font-bold text-foreground tabular-nums">{stats.total}</span>
-            <span className="text-muted-foreground ml-1">Total</span>
+    <div className="space-y-6">
+      {/* Top Controls: Metrics Row + Add Job Action */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
+          <div className="flex items-center gap-2.5 rounded-xl border border-border bg-card px-3.5 py-2 shadow-sm">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/10 text-accent font-bold text-xs">
+              ∑
+            </span>
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Total</div>
+              <div className="text-base font-extrabold text-foreground tabular-nums leading-none mt-0.5">{stats.total}</div>
+            </div>
           </div>
-          <div className="text-sm">
-            <span className="font-bold text-foreground tabular-nums">{stats.applied}</span>
-            <span className="text-muted-foreground ml-1">Applied</span>
+
+          <div className="flex items-center gap-2.5 rounded-xl border border-amber-200/60 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/30 px-3.5 py-2 shadow-sm">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold text-xs">
+              ⚡
+            </span>
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Applied</div>
+              <div className="text-base font-extrabold text-amber-700 dark:text-amber-300 tabular-nums leading-none mt-0.5">{stats.applied}</div>
+            </div>
           </div>
-          <div className="text-sm">
-            <span className="font-bold text-foreground tabular-nums">{stats.interviews}</span>
-            <span className="text-muted-foreground ml-1">Interviews</span>
+
+          <div className="flex items-center gap-2.5 rounded-xl border border-green-200/60 dark:border-green-900/60 bg-green-50/50 dark:bg-green-950/30 px-3.5 py-2 shadow-sm">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-green-500/15 text-green-700 dark:text-green-300 font-bold text-xs">
+              💬
+            </span>
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Interviews</div>
+              <div className="text-base font-extrabold text-green-700 dark:text-green-300 tabular-nums leading-none mt-0.5">{stats.interviews}</div>
+            </div>
           </div>
-          <div className="text-sm">
-            <span className="font-bold text-foreground tabular-nums">{stats.offers}</span>
-            <span className="text-muted-foreground ml-1">Offers</span>
+
+          <div className="flex items-center gap-2.5 rounded-xl border border-emerald-200/60 dark:border-emerald-900/60 bg-emerald-50/50 dark:bg-emerald-950/30 px-3.5 py-2 shadow-sm">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold text-xs">
+              🎉
+            </span>
+            <div>
+              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Offers</div>
+              <div className="text-base font-extrabold text-emerald-700 dark:text-emerald-300 tabular-nums leading-none mt-0.5">{stats.offers}</div>
+            </div>
           </div>
         </div>
+
         <button
           onClick={() => setIsAddModalOpen(true)}
-          className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-accent/25 transition-all hover:bg-accent-hover hover:shadow-lg hover:scale-[1.01]"
         >
           <Plus className="h-4 w-4" aria-hidden />
-          Add Job
+          <span>Add Application</span>
         </button>
       </div>
 
-      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
+      {/* Search and Filters Toolbar */}
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_160px_150px_150px]">
         <input
           type="text"
-          placeholder="Search jobs..."
+          placeholder="Search company, title, or location..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="min-w-0 w-full rounded-lg border border-input px-4 py-2 text-foreground focus:outline-none focus:border-ring"
+          className="min-w-0 w-full rounded-xl border border-input bg-card px-3.5 py-2 text-sm text-foreground shadow-sm transition-all focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
         />
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as JobStatus | 'ALL')}
-          className="min-w-0 w-full rounded-lg border border-input px-4 py-2 text-foreground focus:outline-none focus:border-ring"
+          className="min-w-0 w-full rounded-xl border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm transition-all focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
         >
           <option value="ALL">All Statuses</option>
           {columns.map((status) => (
@@ -302,7 +328,7 @@ export function KanbanBoard() {
         <select
           value={sourceFilter}
           onChange={(e) => setSourceFilter(e.target.value)}
-          className="min-w-0 w-full rounded-lg border border-input px-4 py-2 text-foreground focus:outline-none focus:border-ring"
+          className="min-w-0 w-full rounded-xl border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm transition-all focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
         >
           <option value="ALL">All Sources</option>
           <option value="linkedin">LinkedIn</option>
@@ -313,7 +339,7 @@ export function KanbanBoard() {
         <select
           value={dateFilter}
           onChange={(e) => setDateFilter(e.target.value as 'ALL' | '7days' | '30days' | '90days')}
-          className="min-w-0 w-full rounded-lg border border-input px-4 py-2 text-foreground focus:outline-none focus:border-ring"
+          className="min-w-0 w-full rounded-xl border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm transition-all focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
         >
           <option value="ALL">All Time</option>
           <option value="7days">Last 7 days</option>
@@ -323,33 +349,35 @@ export function KanbanBoard() {
       </div>
 
       {filteredJobs.length === 0 && (
-        <div className="mb-4 text-sm text-muted-foreground">
+        <div className="rounded-2xl border border-dashed border-border bg-card/40 p-8 text-center text-sm text-muted-foreground">
           {jobs.length === 0
-            ? 'No jobs yet — click "+ Add Job" to get started.'
-            : 'No jobs match your search or filters.'}
+            ? 'No applications yet — click "+ Add Application" to start your pipeline.'
+            : 'No applications match your active search and filter criteria.'}
         </div>
       )}
 
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        <div className="flex max-w-full gap-4 overflow-x-auto pb-4">
+        <div className="flex max-w-full gap-4 overflow-x-auto pb-4 pt-1">
           {columns.map((status) => (
             <DroppableColumn
               key={status}
               status={status}
-              className={`w-[min(18rem,calc(100vw-2rem))] shrink-0 ${COLUMN_COLORS[status] ?? 'bg-muted border-border'} rounded-lg border p-3`}
+              className={`w-[min(19rem,calc(100vw-2.5rem))] shrink-0 ${COLUMN_COLORS[status] ?? 'bg-muted border-border'} rounded-2xl border p-3.5 shadow-sm transition-all`}
             >
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-foreground text-sm">{statusLabel(status)}</h3>
-                <span className="text-xs text-muted-foreground bg-card px-2 py-0.5 rounded-full tabular-nums">
+              <div className="flex items-center justify-between mb-3 px-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-foreground text-sm tracking-tight">{statusLabel(status)}</h3>
+                </div>
+                <span className="text-xs font-bold text-muted-foreground bg-card/90 px-2 py-0.5 rounded-full shadow-sm tabular-nums">
                   {jobsByColumn[status].length}
                 </span>
               </div>
               <SortableContext items={jobsByColumn[status].map((j) => j.id)}>
-                <div className="space-y-2 min-h-[100px]">
+                <div className="space-y-2.5 min-h-[140px]">
                   {jobsByColumn[status].length === 0 && (
-                    <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
-                      Drop a job here
-                    </p>
+                    <div className="flex h-32 flex-col items-center justify-center rounded-xl border border-dashed border-border/80 bg-background/50 px-3 text-center text-xs text-muted-foreground">
+                      <span className="opacity-50">Drop here</span>
+                    </div>
                   )}
                   {jobsByColumn[status].map((job) => (
                     <SortableJobCard 
@@ -373,7 +401,7 @@ export function KanbanBoard() {
               }}
             >
               {activeJob ? (
-                <div className="w-[calc(min(18rem,calc(100vw-2rem))-1.5rem)] cursor-grabbing rotate-[1.5deg] scale-[1.02] rounded-lg shadow-2xl ring-2 ring-accent transition-transform select-none">
+                <div className="w-[calc(min(19rem,calc(100vw-2.5rem))-1.75rem)] cursor-grabbing rotate-[1.5deg] scale-[1.02] rounded-xl shadow-2xl ring-2 ring-accent transition-transform select-none">
                   <JobCard job={activeJob} />
                 </div>
               ) : null}

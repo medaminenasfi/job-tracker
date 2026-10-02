@@ -8,6 +8,7 @@ import { TurnstileField, type TurnstileFieldHandle } from '@/components/Turnstil
 import { readUrlError } from '@/lib/auth-errors';
 import Link from 'next/link';
 import { ButtonLoader } from '@/components/ui/Loading';
+import { AuthShell } from '@/components/AuthShell';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -40,16 +41,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
-      <div className="w-full max-w-md border border-border bg-card rounded-2xl p-8 shadow-card animate-pop-in">
-        <div className="flex items-center gap-3 mb-2">
-          <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" className="text-foreground">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-          </svg>
-          <h1 className="text-2xl font-bold text-foreground">Welcome back</h1>
-        </div>
-        <p className="text-muted-foreground mb-6 text-sm">Sign in to your Job Tracker account</p>
-
+    <AuthShell title="Welcome back" subtitle="Sign in to your Job Tracker account">
         {error && (
           <div id="login-error" role="alert" className="mb-4 p-3 bg-red-50 dark:bg-red-950 border border-red-300 dark:border-red-800 rounded-lg text-red-700 dark:text-red-300 text-sm">
             {error}
@@ -79,7 +71,15 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Password</label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-sm font-medium text-foreground">Password</label>
+              <Link
+                href="/forgot-password"
+                className="text-xs font-semibold text-accent hover:text-accent-hover transition-colors"
+              >
+                Forgot password?
+              </Link>
+            </div>
             <PasswordInput
               id="login-password"
               required
@@ -95,7 +95,7 @@ export default function LoginPage() {
             id="login-submit"
             type="submit"
             disabled={loading || !token}
-            className="w-full bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-lg transition-colors"
+            className="w-full bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-xl shadow-md shadow-accent/25 transition-all hover:shadow-lg hover:scale-[1.01]"
           >
             {loading ? <ButtonLoader label="Signing in..." /> : token ? 'Sign in' : 'Verifying…'}
           </button>
@@ -103,11 +103,10 @@ export default function LoginPage() {
 
         <p className="mt-6 text-center text-sm text-muted-foreground">
           No account?{' '}
-          <Link href="/register" className="text-foreground font-semibold underline">
+          <Link href="/register" className="text-foreground font-semibold underline hover:text-accent transition-colors">
             Create one
           </Link>
         </p>
-      </div>
-    </div>
+    </AuthShell>
   );
 }

@@ -7,8 +7,7 @@ import { Injectable, Logger } from '@nestjs/common';
 // through. See AGENTS.md §13 (security) and §12 (intentional error handling).
 
 export type TurnstileVerifyResult =
-  | { success: true }
-  | { success: false; status: 400 | 503; detail: string };
+  { success: true } | { success: false; status: 400 | 503; detail: string };
 
 interface SiteVerifyResponse {
   success: boolean;

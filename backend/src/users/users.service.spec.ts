@@ -133,7 +133,9 @@ describe('UsersService', () => {
         .mockResolvedValueOnce({ rows: [{ position: 7 }] })
         .mockResolvedValueOnce({ rows: [{ id: 's1', name: 'Phone screen' }] });
 
-      await expect(service.createStatus('u1', { name: 'Phone screen' })).resolves.toEqual({
+      await expect(
+        service.createStatus('u1', { name: 'Phone screen' }),
+      ).resolves.toEqual({
         id: 's1',
         name: 'Phone screen',
       });
@@ -147,7 +149,9 @@ describe('UsersService', () => {
         .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [{ id: 's1' }] });
 
-      await expect(service.deleteStatus('u1', 's1')).resolves.toEqual({ deleted: true });
+      await expect(service.deleteStatus('u1', 's1')).resolves.toEqual({
+        deleted: true,
+      });
       expect(query.mock.calls[2][0]).toContain('UPDATE jobs SET status');
     });
   });

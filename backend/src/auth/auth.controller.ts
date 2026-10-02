@@ -9,7 +9,11 @@ import {
   Req,
   Next,
 } from '@nestjs/common';
-import type { NextFunction, Request as ExpressRequest, Response } from 'express';
+import type {
+  NextFunction,
+  Request as ExpressRequest,
+  Response,
+} from 'express';
 // Default import (not `import * as`): passport's singleton exposes `authenticate`
 // on its prototype, which a namespace import's __importStar wrapper would drop.
 import passport from 'passport';
@@ -38,6 +42,20 @@ export class AuthController {
   @Post('login')
   login(@Body() body: unknown, @Res({ passthrough: true }) res: Response) {
     return this.authService.login(body, res);
+  }
+
+  @UseGuards(TurnstileGuard)
+  @TurnstileAction('forgot_password')
+  @Post('forgot-password')
+  forgotPassword(@Body() body: unknown) {
+    return this.authService.forgotPassword(body);
+  }
+
+  @UseGuards(TurnstileGuard)
+  @TurnstileAction('reset_password')
+  @Post('reset-password')
+  resetPassword(@Body() body: unknown) {
+    return this.authService.resetPassword(body);
   }
 
   @Post('refresh')

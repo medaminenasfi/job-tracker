@@ -132,6 +132,21 @@ textarea {
   }
 }
 
+/* Ambient backdrop: soft accent glow fading into a faint grid (auth pages,
+   landing hero). Purely decorative — never intercepts pointer events. */
+.ambient-grid {
+  background-image:
+    radial-gradient(
+      ellipse 70% 45% at 50% 0%,
+      color-mix(in srgb, var(--accent) 12%, transparent),
+      transparent 70%
+    ),
+    linear-gradient(to right, var(--border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+  background-size: 100% 100%, 44px 44px, 44px 44px;
+  mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, black 20%, transparent 75%);
+}
+
 /* Phase 11.4 — respect reduced-motion: keep state changes, drop the movement. */
 @media (prefers-reduced-motion: reduce) {
   *,

@@ -51,10 +51,8 @@ export class CookieStateStore {
 
   verify(req: Request, providedState: string, cb: VerifyCallback): void {
     const res = (req as Request & { res?: Response }).res;
-    const cookieState =
-      (req as Request & { cookies?: Record<string, string> }).cookies?.[
-        GOOGLE_STATE_COOKIE
-      ];
+    const cookieState = (req as Request & { cookies?: Record<string, string> })
+      .cookies?.[GOOGLE_STATE_COOKIE];
     // Always clear the one-time state cookie, whether or not it matched.
     if (res) res.clearCookie(GOOGLE_STATE_COOKIE, stateCookieOptions());
     if (

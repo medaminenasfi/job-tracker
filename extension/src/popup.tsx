@@ -232,73 +232,93 @@ export function Popup() {
 
       {!token ? (
         <div className="login-section">
+          <span className="login-icon" aria-hidden="true">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              <path d="m9 12 2 2 4-4" />
+            </svg>
+          </span>
           <p>Please log in to save jobs</p>
+          <p>Capture jobs from any page and track them in one place.</p>
           <button onClick={handleLogin} className="btn btn-primary">
             Log In
           </button>
         </div>
       ) : (
         <div className="content">
-          {jobData.source ? (
-            <p className="detect-note">
-              Detected on this page
-              <span className="source-chip">{jobData.source}</span>
-            </p>
-          ) : (
-            <p className="detect-note">
-              No job detected on this page — fill in the details below.
-            </p>
-          )}
-
-          <div className="form-group">
-            <label>Title</label>
-            <input
-              type="text"
-              value={jobData.title || ''}
-              onChange={(e) => setJobData({ ...jobData, title: e.target.value })}
-              placeholder="Job title"
+          <p className="detect-note">
+            <span
+              className={`detect-dot${jobData.source ? ' is-live' : ''}`}
+              aria-hidden="true"
             />
+            {jobData.source ? (
+              <>
+                Detected on this page
+                <span className="source-chip">{jobData.source}</span>
+              </>
+            ) : (
+              'No job detected on this page — fill in the details below.'
+            )}
+          </p>
+
+          <div className="capture-card card">
+            <div className="form-group">
+              <label>Title</label>
+              <input
+                type="text"
+                value={jobData.title || ''}
+                onChange={(e) => setJobData({ ...jobData, title: e.target.value })}
+                placeholder="Job title"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Company</label>
+              <input
+                type="text"
+                value={jobData.company || ''}
+                onChange={(e) => setJobData({ ...jobData, company: e.target.value })}
+                placeholder="Company name"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Location</label>
+              <input
+                type="text"
+                value={jobData.location || ''}
+                onChange={(e) => setJobData({ ...jobData, location: e.target.value })}
+                placeholder="Location"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Note</label>
+              <textarea
+                value={jobData.notes || ''}
+                onChange={(e) => setJobData({ ...jobData, notes: e.target.value })}
+                placeholder="Add a note (referral, follow-up, etc.)"
+                rows={3}
+              />
+            </div>
+
+            <button onClick={handleSave} disabled={saving} className="btn btn-primary">
+              {saving ? 'Saving...' : 'Save Job'}
+            </button>
+
+            {message && <div className={`message ${message.type}`}>{message.text}</div>}
           </div>
 
-          <div className="form-group">
-            <label>Company</label>
-            <input
-              type="text"
-              value={jobData.company || ''}
-              onChange={(e) => setJobData({ ...jobData, company: e.target.value })}
-              placeholder="Company name"
-            />
-          </div>
-
-          <div className="form-group">
-            <label>Location</label>
-            <input
-              type="text"
-              value={jobData.location || ''}
-              onChange={(e) => setJobData({ ...jobData, location: e.target.value })}
-              placeholder="Location"
-            />
-          </div>
-
-          <div className="form-group">
-            <label>Note</label>
-            <textarea
-              value={jobData.notes || ''}
-              onChange={(e) => setJobData({ ...jobData, notes: e.target.value })}
-              placeholder="Add a note (referral, follow-up, etc.)"
-              rows={3}
-            />
-          </div>
-
-          <button onClick={handleSave} disabled={saving} className="btn btn-primary">
-            {saving ? 'Saving...' : 'Save Job'}
-          </button>
-
-          {message && <div className={`message ${message.type}`}>{message.text}</div>}
-
-          <hr className="divider" />
-
-          <div className="apply-section">
+          <div className="apply-section card">
             <h3 className="section-title">Applications</h3>
             {matchedJob ? (
               <>

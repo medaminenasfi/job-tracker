@@ -314,7 +314,11 @@ describe('AdminService', () => {
   describe('createUser (admin-only)', () => {
     it('creates a USER, logs USER_CREATED, and returns the safe row', async () => {
       auth.createUser.mockResolvedValue('u9');
-      repo.getUser.mockResolvedValue({ id: 'u9', role: 'USER', email: 'u@x.com' });
+      repo.getUser.mockResolvedValue({
+        id: 'u9',
+        role: 'USER',
+        email: 'u@x.com',
+      });
       const result = await service.createUser('a1', {
         name: 'U',
         email: 'u@x.com',

@@ -55,7 +55,10 @@ describe('TurnstileService', () => {
 
   it('rejects with 400 when Cloudflare reports success:false', async () => {
     mockFetch(() =>
-      jsonResponse({ success: false, 'error-codes': ['invalid-input-response'] }),
+      jsonResponse({
+        success: false,
+        'error-codes': ['invalid-input-response'],
+      }),
     );
     await expect(service.verify('bad-token')).resolves.toEqual({
       success: false,
@@ -85,9 +88,9 @@ describe('TurnstileService', () => {
   // that case, otherwise every dev login/register would be rejected.
   it('accepts when Cloudflare omits the action (test keys)', async () => {
     mockFetch(() => jsonResponse({ success: true }));
-    await expect(service.verify('XXXX.DUMMY.TOKEN', undefined, 'login')).resolves.toEqual(
-      { success: true },
-    );
+    await expect(
+      service.verify('XXXX.DUMMY.TOKEN', undefined, 'login'),
+    ).resolves.toEqual({ success: true });
   });
 
   it('rejects with 400 when the hostname is not allowed', async () => {

@@ -23,7 +23,8 @@ const optionalText = (max: number) =>
 // url dedup index.
 const clearableText = (max: number) =>
   z.preprocess(
-    (value) => (typeof value === 'string' && value.trim() === '' ? null : value),
+    (value) =>
+      typeof value === 'string' && value.trim() === '' ? null : value,
     z.string().trim().max(max).nullable().optional(),
   );
 

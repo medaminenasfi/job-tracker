@@ -22,7 +22,8 @@ const UPDATABLE_JOB_FIELDS = new Set([
 // is partial on `url IS NOT NULL`, so url-less manual entries must store NULL —
 // otherwise two manual jobs with url = '' for the same user would collide.
 function normalizeUrl(value: unknown): string | null {
-  if (typeof value !== 'string') return value == null ? null : (value as string);
+  if (typeof value !== 'string')
+    return value == null ? null : (value as string);
   const trimmed = value.trim();
   return trimmed === '' ? null : trimmed;
 }

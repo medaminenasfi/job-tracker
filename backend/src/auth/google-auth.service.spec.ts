@@ -2,13 +2,15 @@ import { GoogleAuthService } from './google-auth.service';
 import type { Profile } from 'passport-google-oauth20';
 
 // Builds a minimal Passport Google profile for the cases we care about.
-function makeProfile(over: {
-  id?: string;
-  email?: string | null;
-  verified?: boolean;
-  displayName?: string;
-  account_status?: string;
-} = {}): Profile {
+function makeProfile(
+  over: {
+    id?: string;
+    email?: string | null;
+    verified?: boolean;
+    displayName?: string;
+    account_status?: string;
+  } = {},
+): Profile {
   const email = over.email === undefined ? 'jane@example.com' : over.email;
   return {
     id: over.id ?? 'google-123',
@@ -20,7 +22,7 @@ function makeProfile(over: {
       email_verified: over.verified ?? true,
       picture: 'https://avatar.example/p.png',
     },
-  } as unknown as Profile;
+  };
 }
 
 describe('GoogleAuthService', () => {
@@ -54,7 +56,9 @@ describe('GoogleAuthService', () => {
       .mockResolvedValueOnce({ rows: [] })
       // SELECT by email -> existing local user
       .mockResolvedValueOnce({
-        rows: [{ id: 'u2', role: 'USER', account_status: 'ACTIVE', google_id: null }],
+        rows: [
+          { id: 'u2', role: 'USER', account_status: 'ACTIVE', google_id: null },
+        ],
       })
       // UPDATE google_id (link)
       .mockResolvedValueOnce({ rows: [] })
@@ -75,7 +79,9 @@ describe('GoogleAuthService', () => {
     query
       .mockResolvedValueOnce({ rows: [] }) // by google_id
       .mockResolvedValueOnce({
-        rows: [{ id: 'u2', role: 'USER', account_status: 'ACTIVE', google_id: null }],
+        rows: [
+          { id: 'u2', role: 'USER', account_status: 'ACTIVE', google_id: null },
+        ],
       }); // by email
 
     const result = await service.handleGoogleUser(

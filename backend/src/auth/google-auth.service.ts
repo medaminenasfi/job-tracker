@@ -7,8 +7,7 @@ import { DbService } from '../db/db.service';
 export type GoogleBlockReason = 'email_not_verified' | 'no_email' | 'suspended';
 
 export type GoogleAuthResult =
-  | { id: string; role: string }
-  | { blocked: GoogleBlockReason };
+  { id: string; role: string } | { blocked: GoogleBlockReason };
 
 function isBlocked(r: GoogleAuthResult): r is { blocked: GoogleBlockReason } {
   return 'blocked' in r;
@@ -65,7 +64,7 @@ export class GoogleAuthService {
     //    an account behind an address the person does not control.
     if (!emailVerified) return { blocked: 'email_not_verified' };
     const inserted = await this.db.query(
-      "INSERT INTO users (name, email, password_hash, role, google_id, avatar_url, auth_provider) " +
+      'INSERT INTO users (name, email, password_hash, role, google_id, avatar_url, auth_provider) ' +
         "VALUES ($1, $2, NULL, 'USER', $3, $4, 'google') RETURNING id, role, account_status",
       [name, email, googleId, avatar],
     );
@@ -89,9 +88,10 @@ export class GoogleAuthService {
     account_status?: string | null;
   }): Promise<GoogleAuthResult> {
     if (user.account_status === 'SUSPENDED') return { blocked: 'suspended' };
-    await this.db.query('UPDATE users SET last_login_at = now() WHERE id = $1', [
-      user.id,
-    ]);
+    await this.db.query(
+      'UPDATE users SET last_login_at = now() WHERE id = $1',
+      [user.id],
+    );
     return { id: user.id, role: user.role ?? 'USER' };
   }
 }
