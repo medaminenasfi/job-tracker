@@ -1,0 +1,53 @@
+# Render Blueprint (Phase 12) — deploys the NestJS API on Render's FREE web tier.
+#
+# How to use:
+#   1. Push this repo to GitHub/GitLab.
+#   2. On Render: New +  ->  Blueprint  ->  pick this repo. Render reads this file.
+#   3. Fill the env vars marked `sync: false` in the dashboard (they are secrets /
+#      account-specific and are intentionally NOT stored in the repo).
+#
+# Free-tier caveat: the service spins down after ~15 min idle; the first request
+# then takes ~30-60s to cold-start. Fine for a portfolio demo, not for prod SLAs.
+#
+# The Postgres DATABASE_URL is NOT provisioned here — use a free managed Postgres
+# (e.g. Neon) and paste its connection string. See docs/DEPLOYMENT_GUIDE.md.
+
+services:
+  - type: web
+    name: jobtracker-api
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: backend/Dockerfile
+    dockerContext: backend
+    # AppController returns 200 at the global prefix root; used as the health check.
+    healthCheckPath: /api
+    envVars:
+      # --- provided by you (secrets / account-specific) ---
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_CALLBACK_URL
+        sync: false
+      - key: TURNSTILE_SECRET_KEY
+        sync: false
+      - key: TURNSTILE_ALLOWED_HOSTNAMES
+        sync: false
+      # --- auto-generated random secrets (never commit real values) ---
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      # --- safe defaults ---
+      - key: JWT_ACCESS_EXPIRY
+        value: 15m
+      - key: JWT_REFRESH_EXPIRY
+        value: 7d
+      - key: NODE_ENV
+        value: production
+    # Render injects PORT automatically; main.ts already honors process.env.PORT.

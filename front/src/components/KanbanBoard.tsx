@@ -2,9 +2,8 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCorners, useDroppable, PointerSensor, KeyboardSensor, useSensor, useSensors } from '@dnd-kit/core';
-import { SortableContext, useSortable, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
+import { SortableContext, useSortable, sortableKeyboardCoordinates, defaultAnimateLayoutChanges, AnimateLayoutChanges } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { snapCenterToCursor } from '@dnd-kit/modifiers';
 import { Plus } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { Job, JobStatus } from '@/lib/types';
@@ -14,7 +13,8 @@ import { AddJobModal } from './AddJobModal';
 import { JobDetailsModal } from './JobDetailsModal';
 import { Toast, useToast } from './Toast';
 import { Skeleton } from './Skeleton';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 // Per-column tints with matching dark-mode variants (Phase 11.3).
 const COLUMN_COLORS: Record<JobStatus, string> = {
@@ -27,17 +27,23 @@ const COLUMN_COLORS: Record<JobStatus, string> = {
   WITHDRAWN: 'bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800',
 };
 
+const animateLayoutChanges: AnimateLayoutChanges = (args) =>
+  defaultAnimateLayoutChanges({ ...args, wasDragging: true });
+
 function SortableJobCard({ job, onViewDetails }: { job: Job; onViewDetails: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: job.id,
+    animateLayoutChanges,
+    transition: {
+      duration: 250,
+      easing: 'cubic-bezier(0.25, 1, 0.5, 1)',
+    },
   });
 
   const style = {
-    transform: CSS.Transform.toString(transform),
+    transform: CSS.Translate.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : 1,
-    transformOrigin: 'top left',
-    willChange: 'transform',
+    opacity: isDragging ? 0.35 : 1,
   };
 
   return (
@@ -46,7 +52,9 @@ function SortableJobCard({ job, onViewDetails }: { job: Job; onViewDetails: () =
       style={style} 
       {...attributes}
       {...listeners}
-      className="cursor-grab active:cursor-grabbing"
+      className={`cursor-grab active:cursor-grabbing transition-opacity duration-200 ${
+        isDragging ? 'pointer-events-none scale-[0.98]' : ''
+      }`}
     >
       <JobCard job={job} onViewDetails={onViewDetails} isDragging={isDragging} />
     </div>
@@ -62,7 +70,9 @@ function DroppableColumn({ status, children, className }: { status: JobStatus; c
     <div
       ref={setNodeRef}
       id={`column-${status}`}
-      className={`${className} transition-shadow ${isOver ? 'ring-2 ring-inset ring-accent' : ''}`}
+      className={`${className} transition-all duration-200 ${
+        isOver ? 'ring-2 ring-inset ring-accent bg-accent/5 dark:bg-accent/10 shadow-md' : ''
+      }`}
     >
       {children}
     </div>
@@ -79,6 +89,12 @@ export function KanbanBoard() {
   const [statusFilter, setStatusFilter] = useState<JobStatus | 'ALL'>('ALL');
   const [sourceFilter, setSourceFilter] = useState<string>('ALL');
   const [dateFilter, setDateFilter] = useState<'ALL' | '7days' | '30days' | '90days'>('ALL');
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const { data: statusConfigs, isLoading: statusesLoading } = useJobStatuses();
   const columns: JobStatus[] = statusConfigs?.map((status) => status.name) ?? DEFAULT_STATUS_NAMES;
 
@@ -348,20 +364,22 @@ export function KanbanBoard() {
           ))}
         </div>
 
-        <DragOverlay
-          modifiers={[snapCenterToCursor]}
-          dropAnimation={{
-            duration: 180,
-            easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)',
-          }}
-        >
-          {/* Lifted, slightly rotated ghost while dragging (Phase 11.3). */}
-          {activeJob ? (
-            <div className="w-[min(18rem,calc(100vw-2rem))] origin-top-left rounded-lg shadow-card-hover ring-2 ring-accent">
-              <JobCard job={activeJob} />
-            </div>
-          ) : null}
-        </DragOverlay>
+        {isMounted &&
+          createPortal(
+            <DragOverlay
+              dropAnimation={{
+                duration: 200,
+                easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
+              }}
+            >
+              {activeJob ? (
+                <div className="w-[calc(min(18rem,calc(100vw-2rem))-1.5rem)] cursor-grabbing rotate-[1.5deg] scale-[1.02] rounded-lg shadow-2xl ring-2 ring-accent transition-transform select-none">
+                  <JobCard job={activeJob} />
+                </div>
+              ) : null}
+            </DragOverlay>,
+            document.body
+          )}
       </DndContext>
 
       <AddJobModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} />

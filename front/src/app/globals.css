@@ -40,8 +40,18 @@
 }
 
 body {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
   background: var(--background);
   color: var(--foreground);
+}
+
+button,
+input,
+select,
+textarea {
+  max-width: 100%;
 }
 
 .job-description-content p {

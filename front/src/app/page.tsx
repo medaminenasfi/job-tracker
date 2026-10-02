@@ -220,6 +220,9 @@ export default function Home() {
             <Link href="/register" className="transition-colors hover:text-foreground">
               Get started
             </Link>
+            <Link href="/privacy" className="transition-colors hover:text-foreground">
+              Privacy
+            </Link>
           </div>
         </div>
       </footer>

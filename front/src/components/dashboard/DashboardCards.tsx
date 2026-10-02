@@ -43,7 +43,7 @@ export function GettingStartedChecklist({
   const completed = steps.filter((s) => s.done).length;
 
   return (
-    <div className="bg-card border border-border rounded-lg p-6 mb-6">
+    <div className="bg-card border border-border rounded-lg p-4 sm:p-6 mb-6">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-lg font-bold text-foreground">Getting started</h2>
         <span className="text-sm text-muted-foreground">
@@ -78,7 +78,7 @@ export function GettingStartedChecklist({
 
 export function InstallExtensionCard() {
   return (
-    <div className="bg-card border border-border rounded-lg p-6">
+    <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
       <h2 className="text-lg font-bold text-foreground mb-2">Browser extension</h2>
       <p className="text-sm text-muted-foreground mb-4">
         One-click save jobs from LinkedIn, Indeed and other boards straight into
@@ -105,7 +105,7 @@ const HOW_IT_WORKS = [
 
 export function HowItWorksCard() {
   return (
-    <div className="bg-card border border-border rounded-lg p-6">
+    <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
       <h2 className="text-lg font-bold text-foreground mb-4">How it works</h2>
       <ol className="space-y-3">
         {HOW_IT_WORKS.map((s) => (
@@ -138,7 +138,7 @@ export function TipsCard() {
   }, []);
 
   return (
-    <div className="bg-card border border-border rounded-lg p-6">
+    <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
       <h2 className="flex items-center gap-2 text-lg font-bold text-foreground mb-2">
         <Lightbulb className="h-5 w-5 text-accent" aria-hidden />
         Tip
@@ -276,7 +276,7 @@ export function ActivitySummary({
 export function AnnouncementsCard({ items }: { items: Announcement[] }) {
   if (items.length === 0) return null;
   return (
-    <div className="bg-card border border-border rounded-lg p-6">
+    <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
       <h2 className="flex items-center gap-2 text-lg font-bold text-foreground mb-4">
         <Megaphone className="h-5 w-5 text-accent" aria-hidden />
         What&apos;s new

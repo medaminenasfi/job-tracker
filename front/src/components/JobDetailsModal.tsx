@@ -188,7 +188,7 @@ export function JobDetailsModal({ job, isOpen, onClose }: JobDetailsModalProps) 
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-0 animate-fade-in sm:p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 animate-fade-in sm:items-center sm:p-4"
       onClick={onClose}
       role="presentation"
     >
@@ -197,19 +197,19 @@ export function JobDetailsModal({ job, isOpen, onClose }: JobDetailsModalProps) 
         aria-modal="true"
         aria-labelledby="job-details-title"
         onClick={(event) => event.stopPropagation()}
-        className="flex h-[100dvh] max-h-[100dvh] w-full flex-col overflow-hidden bg-card shadow-card-hover animate-pop-in sm:h-auto sm:max-h-[90dvh] sm:max-w-3xl sm:rounded-2xl sm:border sm:border-border"
+        className="flex max-h-[92dvh] w-full min-w-0 flex-col overflow-hidden rounded-t-2xl border-t border-border bg-card shadow-2xl animate-pop-in sm:h-auto sm:max-h-[88dvh] sm:max-w-3xl sm:rounded-2xl sm:border"
       >
-        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-border px-5 py-4 sm:px-6">
-          <div className="min-w-0">
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-accent/10 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-accent">
+        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-border p-4 sm:p-6">
+          <div className="min-w-0 flex-1">
+            <div className="mb-2 flex flex-wrap items-center gap-1.5 sm:gap-2">
+              <span className="rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-accent">
                 {job.source || 'Job'}
               </span>
-              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+              <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
                 {status}
               </span>
             </div>
-            <h2 id="job-details-title" className="break-words text-xl font-bold leading-tight text-foreground sm:text-2xl">
+            <h2 id="job-details-title" className="break-words text-lg font-bold leading-snug text-foreground sm:text-2xl">
               {job.title}
             </h2>
             <p className="mt-1 break-words text-sm text-muted-foreground">{job.company}</p>
@@ -220,13 +220,13 @@ export function JobDetailsModal({ job, isOpen, onClose }: JobDetailsModalProps) 
             onClick={onClose}
             aria-label="Close job details"
             title="Close"
-            className="shrink-0 rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:p-2"
           >
             <X className="h-5 w-5" aria-hidden />
           </button>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 sm:p-6">
           <section className="mb-6">
             <div className="mb-3 flex items-center justify-between gap-3">
               <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Job information</h3>
@@ -369,40 +369,43 @@ export function JobDetailsModal({ job, isOpen, onClose }: JobDetailsModalProps) 
           </section>
         </div>
 
-        <footer className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border bg-card px-5 py-4 sm:px-6">
+        <footer className="flex shrink-0 flex-col-reverse gap-3 border-t border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+          <div className="flex w-full flex-wrap items-center justify-between gap-2 sm:w-auto sm:justify-start">
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              Status:
+              <select
+                value={status}
+                onChange={(event) => handleStatusChange(event.target.value as JobStatus)}
+                disabled={updateJobMutation.isPending}
+                className="rounded-lg border border-input bg-card px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                {statuses.map((item) => (
+                  <option key={item} value={item}>{statusLabel(item)}</option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleteJobMutation.isPending}
+              className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+            >
+              {deleteJobMutation.isPending ? <ButtonLoader label="Deleting..." /> : 'Delete'}
+            </button>
+          </div>
+
           {job.url && (
             <a
               href={job.url}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(event) => event.stopPropagation()}
-              className="inline-flex items-center gap-2 rounded-lg border border-input px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-input px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted sm:w-auto"
             >
               <ExternalLink className="h-4 w-4" aria-hidden />
               Open original job
             </a>
           )}
-          <label className="mr-auto flex items-center gap-2 text-xs text-muted-foreground">
-            Status
-            <select
-              value={status}
-              onChange={(event) => handleStatusChange(event.target.value as JobStatus)}
-              disabled={updateJobMutation.isPending}
-              className="rounded-lg border border-input bg-card px-2.5 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              {statuses.map((item) => (
-                <option key={item} value={item}>{statusLabel(item)}</option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            onClick={handleDelete}
-            disabled={deleteJobMutation.isPending}
-            className="rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
-          >
-            {deleteJobMutation.isPending ? <ButtonLoader label="Deleting..." /> : 'Delete job'}
-          </button>
         </footer>
       </div>
     </div>

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiJson } from '@/lib/api';
 import { AdminStats } from '@/lib/types';
 import { useCountUp } from '@/lib/useCountUp';
+import { DashboardSkeleton } from '@/components/Skeleton';
 
 export default function AdminOverviewPage() {
   const { data, isLoading, isError, error } = useQuery({
@@ -11,7 +12,7 @@ export default function AdminOverviewPage() {
     queryFn: () => apiJson<AdminStats>('/api/admin/stats'),
   });
 
-  if (isLoading) return <div className="p-6 text-muted-foreground">Loading...</div>;
+  if (isLoading) return <DashboardSkeleton label="Loading admin overview" />;
   if (isError) {
     return (
       <div className="p-6 text-red-600" role="alert">
