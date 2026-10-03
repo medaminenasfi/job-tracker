@@ -99,7 +99,7 @@ export function JobCard({ job, onViewDetails, isDragging = false }: JobCardProps
           </span>
         )}
         {job.salary && (
-          <span className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5 font-semibold text-emerald-700 dark:text-emerald-300">
+          <span className="inline-flex items-center gap-1 rounded bg-success/10 px-2 py-0.5 font-semibold text-success">
             <DollarSign className="h-3 w-3 shrink-0" />
             <span className="truncate max-w-[110px]">{job.salary}</span>
           </span>

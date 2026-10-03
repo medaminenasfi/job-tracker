@@ -4,28 +4,21 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCorners, useDroppable, PointerSensor, KeyboardSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, useSortable, sortableKeyboardCoordinates, defaultAnimateLayoutChanges, AnimateLayoutChanges } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Plus } from 'lucide-react';
+import { Plus, Layers, Send, Video, Trophy, Inbox, SearchX } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 import { Job, JobStatus } from '@/lib/types';
 import { DEFAULT_STATUS_NAMES, statusLabel, useJobStatuses } from '@/lib/useJobStatuses';
+import { statusStyle } from '@/lib/statusStyles';
 import { JobCard } from './JobCard';
 import { AddJobModal } from './AddJobModal';
 import { JobDetailsModal } from './JobDetailsModal';
 import { Toast, useToast } from './Toast';
 import { Skeleton } from './Skeleton';
+import { StatCard } from '@/components/ui/StatCard';
+import { Button } from '@/components/ui/Button';
+import { ErrorState, EmptyState } from '@/components/ui/EmptyState';
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-
-// Per-column tints with matching dark-mode variants (Phase 11.3).
-const COLUMN_COLORS: Record<JobStatus, string> = {
-  SAVED: 'bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-900',
-  APPLIED: 'bg-yellow-50 dark:bg-yellow-950 border-yellow-200 dark:border-yellow-900',
-  ACCEPTED: 'bg-purple-50 dark:bg-purple-950 border-purple-200 dark:border-purple-900',
-  INTERVIEW: 'bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-900',
-  OFFER: 'bg-emerald-50 dark:bg-emerald-950 border-emerald-200 dark:border-emerald-900',
-  REJECTED: 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-900',
-  WITHDRAWN: 'bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800',
-};
 
 const animateLayoutChanges: AnimateLayoutChanges = (args) =>
   defaultAnimateLayoutChanges({ ...args, wasDragging: true });
@@ -110,7 +103,7 @@ export function KanbanBoard() {
     })
   );
 
-  const { data: jobs = [], isLoading, isError } = useQuery({
+  const { data: jobs = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['jobs'],
     queryFn: async () => {
       const res = await apiFetch('/api/jobs');
@@ -205,9 +198,11 @@ export function KanbanBoard() {
 
   if (isError) {
     return (
-      <div className="text-red-600" role="alert">
-        Failed to load jobs. Check your connection and try again.
-      </div>
+      <ErrorState
+        title="Couldn't load your jobs"
+        message="Check your connection and try again."
+        onRetry={() => refetch()}
+      />
     );
   }
 
@@ -253,107 +248,85 @@ export function KanbanBoard() {
 
   return (
     <div className="space-y-6">
-      {/* Top Controls: Metrics Row + Add Job Action */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
-          <div className="flex items-center gap-2.5 rounded-xl border border-border bg-card px-3.5 py-2 shadow-sm">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/10 text-accent font-bold text-xs">
-              ∑
-            </span>
-            <div>
-              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Total</div>
-              <div className="text-base font-extrabold text-foreground tabular-nums leading-none mt-0.5">{stats.total}</div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2.5 rounded-xl border border-amber-200/60 dark:border-amber-900/60 bg-amber-50/50 dark:bg-amber-950/30 px-3.5 py-2 shadow-sm">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold text-xs">
-              ⚡
-            </span>
-            <div>
-              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Applied</div>
-              <div className="text-base font-extrabold text-amber-700 dark:text-amber-300 tabular-nums leading-none mt-0.5">{stats.applied}</div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2.5 rounded-xl border border-green-200/60 dark:border-green-900/60 bg-green-50/50 dark:bg-green-950/30 px-3.5 py-2 shadow-sm">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-green-500/15 text-green-700 dark:text-green-300 font-bold text-xs">
-              💬
-            </span>
-            <div>
-              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Interviews</div>
-              <div className="text-base font-extrabold text-green-700 dark:text-green-300 tabular-nums leading-none mt-0.5">{stats.interviews}</div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2.5 rounded-xl border border-emerald-200/60 dark:border-emerald-900/60 bg-emerald-50/50 dark:bg-emerald-950/30 px-3.5 py-2 shadow-sm">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold text-xs">
-              🎉
-            </span>
-            <div>
-              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Offers</div>
-              <div className="text-base font-extrabold text-emerald-700 dark:text-emerald-300 tabular-nums leading-none mt-0.5">{stats.offers}</div>
-            </div>
-          </div>
-        </div>
-
-        <button
-          onClick={() => setIsAddModalOpen(true)}
-          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-accent/25 transition-all hover:bg-accent-hover hover:shadow-lg hover:scale-[1.01]"
-        >
-          <Plus className="h-4 w-4" aria-hidden />
-          <span>Add Application</span>
-        </button>
+      {/* Metrics row — shared StatCard primitive, semantic tones, lucide icons. */}
+      <div className="grid grid-cols-2 gap-3.5 sm:gap-4 lg:grid-cols-4">
+        <StatCard value={stats.total} label="Total tracked" icon={Layers} tone="accent" />
+        <StatCard value={stats.applied} label="Applied" icon={Send} tone="warning" />
+        <StatCard value={stats.interviews} label="Interviews" icon={Video} tone="info" />
+        <StatCard value={stats.offers} label="Offers" icon={Trophy} tone="success" />
       </div>
 
-      {/* Search and Filters Toolbar */}
-      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_160px_150px_150px]">
-        <input
-          type="text"
-          placeholder="Search company, title, or location..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="min-w-0 w-full rounded-xl border border-input bg-card px-3.5 py-2 text-sm text-foreground shadow-sm transition-all focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
-        />
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as JobStatus | 'ALL')}
-          className="min-w-0 w-full rounded-xl border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm transition-all focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
-        >
-          <option value="ALL">All Statuses</option>
-          {columns.map((status) => (
-            <option key={status} value={status}>{statusLabel(status)}</option>
-          ))}
-        </select>
-        <select
-          value={sourceFilter}
-          onChange={(e) => setSourceFilter(e.target.value)}
-          className="min-w-0 w-full rounded-xl border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm transition-all focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
-        >
-          <option value="ALL">All Sources</option>
-          <option value="linkedin">LinkedIn</option>
-          <option value="indeed">Indeed</option>
-          <option value="manual">Manual</option>
-          <option value="generic">Generic</option>
-        </select>
-        <select
-          value={dateFilter}
-          onChange={(e) => setDateFilter(e.target.value as 'ALL' | '7days' | '30days' | '90days')}
-          className="min-w-0 w-full rounded-xl border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm transition-all focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
-        >
-          <option value="ALL">All Time</option>
-          <option value="7days">Last 7 days</option>
-          <option value="30days">Last 30 days</option>
-          <option value="90days">Last 90 days</option>
-        </select>
+      {/* Search + filters toolbar with the primary action. */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        <div className="grid flex-1 grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_160px_150px_150px]">
+          <input
+            type="text"
+            placeholder="Search company, title, or location..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            aria-label="Search jobs"
+            className="min-w-0 w-full rounded-xl border border-input bg-card px-3.5 py-2 text-sm text-foreground shadow-sm transition-all focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
+          />
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as JobStatus | 'ALL')}
+            aria-label="Filter by status"
+            className="min-w-0 w-full rounded-xl border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm transition-all focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
+          >
+            <option value="ALL">All Statuses</option>
+            {columns.map((status) => (
+              <option key={status} value={status}>{statusLabel(status)}</option>
+            ))}
+          </select>
+          <select
+            value={sourceFilter}
+            onChange={(e) => setSourceFilter(e.target.value)}
+            aria-label="Filter by source"
+            className="min-w-0 w-full rounded-xl border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm transition-all focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
+          >
+            <option value="ALL">All Sources</option>
+            <option value="linkedin">LinkedIn</option>
+            <option value="indeed">Indeed</option>
+            <option value="manual">Manual</option>
+            <option value="generic">Generic</option>
+          </select>
+          <select
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value as 'ALL' | '7days' | '30days' | '90days')}
+            aria-label="Filter by date"
+            className="min-w-0 w-full rounded-xl border border-input bg-card px-3 py-2 text-sm text-foreground shadow-sm transition-all focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
+          >
+            <option value="ALL">All Time</option>
+            <option value="7days">Last 7 days</option>
+            <option value="30days">Last 30 days</option>
+            <option value="90days">Last 90 days</option>
+          </select>
+        </div>
+
+        <Button onClick={() => setIsAddModalOpen(true)} className="shrink-0">
+          <Plus className="h-4 w-4" aria-hidden />
+          <span>Add Application</span>
+        </Button>
       </div>
 
       {filteredJobs.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-border bg-card/40 p-8 text-center text-sm text-muted-foreground">
-          {jobs.length === 0
-            ? 'No applications yet — click "+ Add Application" to start your pipeline.'
-            : 'No applications match your active search and filter criteria.'}
-        </div>
+        <EmptyState
+          icon={jobs.length === 0 ? Inbox : SearchX}
+          title={jobs.length === 0 ? 'No applications yet' : 'No matches'}
+          description={
+            jobs.length === 0
+              ? 'Add your first job to start building your pipeline.'
+              : 'No applications match your active search and filter criteria.'
+          }
+          action={
+            jobs.length === 0 ? (
+              <Button onClick={() => setIsAddModalOpen(true)}>
+                <Plus className="h-4 w-4" aria-hidden />
+                <span>Add Application</span>
+              </Button>
+            ) : undefined
+          }
+        />
       )}
 
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
@@ -362,7 +335,7 @@ export function KanbanBoard() {
             <DroppableColumn
               key={status}
               status={status}
-              className={`w-[min(19rem,calc(100vw-2.5rem))] shrink-0 ${COLUMN_COLORS[status] ?? 'bg-muted border-border'} rounded-2xl border p-3.5 shadow-sm transition-all`}
+              className={`w-[min(19rem,calc(100vw-2.5rem))] shrink-0 ${statusStyle(status).column} rounded-2xl border p-3.5 shadow-sm transition-all`}
             >
               <div className="flex items-center justify-between mb-3 px-1">
                 <div className="flex items-center gap-2">

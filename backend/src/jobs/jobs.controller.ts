@@ -47,6 +47,20 @@ export class JobsController {
     return this.jobsService.updateStatus(req.user.id, id, status);
   }
 
+  @Patch(':id/follow-up')
+  setFollowUp(
+    @Request() req: { user: { id: string } },
+    @Param('id') id: string,
+    @Body('followUpAt') followUpAt: unknown,
+  ) {
+    return this.jobsService.setFollowUp(req.user.id, id, followUpAt ?? null);
+  }
+
+  @Post(':id/match')
+  computeMatch(@Request() req: any, @Param('id') id: string) {
+    return this.jobsService.computeMatch(req.user.id, id);
+  }
+
   @Delete(':id')
   remove(@Request() req: any, @Param('id') id: string) {
     return this.jobsService.remove(req.user.id, id);

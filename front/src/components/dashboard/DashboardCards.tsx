@@ -6,12 +6,13 @@ import {
   Activity,
   CheckCircle2,
   Circle,
-  Inbox,
   Lightbulb,
   Megaphone,
   TrendingUp,
 } from 'lucide-react';
 import type { Announcement, DashboardSummary } from '@/lib/types';
+import { Card } from '@/components/ui/Card';
+import { buttonStyles } from '@/components/ui/Button';
 
 // Key set by the /extension-login bridge once the extension acknowledges the
 // session. ORed with the server-derived flag so a freshly connected extension
@@ -36,6 +37,7 @@ export function GettingStartedChecklist({
     },
     { label: 'Save your first job', done: checklist.firstJobSaved },
     { label: 'Mark a job as Applied', done: checklist.appliedJob },
+    { label: 'Fill in your profile', done: Boolean(checklist.profileFilled) },
   ];
 
   // Hidden once everything is complete.
@@ -43,16 +45,16 @@ export function GettingStartedChecklist({
   const completed = steps.filter((s) => s.done).length;
 
   return (
-    <div className="bg-card border border-border rounded-lg p-4 sm:p-6 mb-6">
-      <div className="flex items-center justify-between mb-3">
+    <Card className="mb-6 p-4 sm:p-6">
+      <div className="mb-3 flex items-center justify-between">
         <h2 className="text-lg font-bold text-foreground">Getting started</h2>
         <span className="text-sm text-muted-foreground">
           {completed}/{steps.length} done
         </span>
       </div>
-      <div className="h-1.5 w-full bg-muted rounded-full mb-4 overflow-hidden">
+      <div className="mb-4 h-1.5 w-full overflow-hidden rounded-full bg-muted">
         <div
-          className="h-full bg-accent rounded-full transition-all"
+          className="h-full rounded-full bg-accent transition-all"
           style={{ width: `${(completed / steps.length) * 100}%` }}
         />
       </div>
@@ -72,28 +74,25 @@ export function GettingStartedChecklist({
           </li>
         ))}
       </ul>
-    </div>
+    </Card>
   );
 }
 
 export function InstallExtensionCard() {
   return (
-    <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
-      <h2 className="text-lg font-bold text-foreground mb-2">Browser extension</h2>
-      <p className="text-sm text-muted-foreground mb-4">
+    <Card className="p-4 sm:p-6">
+      <h2 className="mb-2 text-lg font-bold text-foreground">Browser extension</h2>
+      <p className="mb-4 text-sm text-muted-foreground">
         One-click save jobs from LinkedIn, Indeed and other boards straight into
         your pipeline — no copy/pasting.
       </p>
-      <Link
-        href="/extension-login"
-        className="inline-block px-4 py-2 bg-accent text-white text-sm rounded-lg hover:bg-accent-hover transition-colors"
-      >
+      <Link href="/extension-login" className={buttonStyles('primary', 'md')}>
         Install extension
       </Link>
-      <p className="text-xs text-muted-foreground mt-3">
+      <p className="mt-3 text-xs text-muted-foreground">
         Chrome Web Store listing coming soon.
       </p>
-    </div>
+    </Card>
   );
 }
 
@@ -105,12 +104,12 @@ const HOW_IT_WORKS = [
 
 export function HowItWorksCard() {
   return (
-    <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
-      <h2 className="text-lg font-bold text-foreground mb-4">How it works</h2>
+    <Card className="p-4 sm:p-6">
+      <h2 className="mb-4 text-lg font-bold text-foreground">How it works</h2>
       <ol className="space-y-3">
         {HOW_IT_WORKS.map((s) => (
           <li key={s.step} className="flex gap-3">
-            <span className="flex-none w-6 h-6 rounded-full bg-accent text-white text-xs font-bold flex items-center justify-center">
+            <span className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-accent text-xs font-bold text-white">
               {s.step}
             </span>
             <div>
@@ -120,7 +119,7 @@ export function HowItWorksCard() {
           </li>
         ))}
       </ol>
-    </div>
+    </Card>
   );
 }
 
@@ -138,13 +137,13 @@ export function TipsCard() {
   }, []);
 
   return (
-    <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
-      <h2 className="flex items-center gap-2 text-lg font-bold text-foreground mb-2">
+    <Card className="p-4 sm:p-6">
+      <h2 className="mb-2 flex items-center gap-2 text-lg font-bold text-foreground">
         <Lightbulb className="h-5 w-5 text-accent" aria-hidden />
         Tip
       </h2>
-      <p className="text-sm text-muted-foreground min-h-[2.5rem]">{TIPS[index]}</p>
-      <div className="flex gap-1.5 mt-3" aria-hidden>
+      <p className="min-h-[2.5rem] text-sm text-muted-foreground">{TIPS[index]}</p>
+      <div className="mt-3 flex gap-1.5" aria-hidden>
         {TIPS.map((_, i) => (
           <span
             key={i}
@@ -152,7 +151,7 @@ export function TipsCard() {
           />
         ))}
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -219,7 +218,7 @@ export function ActivitySummary({
   const weeklyTotal = activity.last7Days.reduce((sum, value) => sum + value, 0);
 
   return (
-    <div className="relative overflow-hidden rounded-lg border border-border bg-card p-6 shadow-card">
+    <Card className="relative overflow-hidden p-6">
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
           <div className="mb-1 flex items-center gap-2">
@@ -269,15 +268,15 @@ export function ActivitySummary({
           {activity.appliedThisWeek}
         </span>
       </div>
-    </div>
+    </Card>
   );
 }
 
 export function AnnouncementsCard({ items }: { items: Announcement[] }) {
   if (items.length === 0) return null;
   return (
-    <div className="bg-card border border-border rounded-lg p-4 sm:p-6">
-      <h2 className="flex items-center gap-2 text-lg font-bold text-foreground mb-4">
+    <Card className="p-4 sm:p-6">
+      <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-foreground">
         <Megaphone className="h-5 w-5 text-accent" aria-hidden />
         What&apos;s new
       </h2>
@@ -288,28 +287,10 @@ export function AnnouncementsCard({ items }: { items: Announcement[] }) {
               <span className="text-sm font-medium text-foreground">{a.title}</span>
               <span className="text-xs text-muted-foreground">{a.date}</span>
             </div>
-            <p className="text-sm text-muted-foreground mt-0.5">{a.body}</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">{a.body}</p>
           </li>
         ))}
       </ul>
-    </div>
-  );
-}
-
-export function EmptyState() {
-  return (
-    <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-900 rounded-lg p-10 text-center mb-8">
-      <Inbox className="mx-auto h-12 w-12 text-blue-500 dark:text-blue-400 mb-3" aria-hidden />
-      <h2 className="text-lg font-bold text-blue-900 dark:text-blue-200 mb-1">No jobs yet</h2>
-      <p className="text-sm text-blue-700 dark:text-blue-300 mb-5">
-        Add your first job to start tracking your applications.
-      </p>
-      <Link
-        href="/dashboard/jobs"
-        className="inline-block px-5 py-2.5 bg-accent text-white text-sm font-medium rounded-lg hover:bg-accent-hover transition-colors"
-      >
-        Add your first job
-      </Link>
-    </div>
+    </Card>
   );
 }

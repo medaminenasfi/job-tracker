@@ -21,6 +21,10 @@ const UPDATABLE_JOB_FIELDS = new Set([
 // Treat a missing, empty, or whitespace-only url as NULL. The unique dedup index
 // is partial on `url IS NOT NULL`, so url-less manual entries must store NULL —
 // otherwise two manual jobs with url = '' for the same user would collide.
+function normalizeCompany(value: unknown): string {
+  return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
+}
+
 function normalizeUrl(value: unknown): string | null {
   if (typeof value !== 'string')
     return value == null ? null : (value as string);
@@ -46,8 +50,8 @@ export class JobsRepository {
     `,
       [
         userId,
-        data.title,
-        data.company,
+        typeof data.title === 'string' ? data.title.trim() : data.title,
+        normalizeCompany(data.company),
         data.location ?? null,
         normalizeUrl(data.url),
         data.source ?? null,
@@ -108,7 +112,13 @@ export class JobsRepository {
     for (const [key, value] of Object.entries(data)) {
       if (value === undefined || !UPDATABLE_JOB_FIELDS.has(key)) continue;
       fields.push(`${key} = $${idx}`);
-      values.push(key === 'url' ? normalizeUrl(value) : value);
+      values.push(
+        key === 'url'
+          ? normalizeUrl(value)
+          : key === 'company'
+            ? normalizeCompany(value)
+            : value,
+      );
       idx++;
     }
     if (fields.length === 0) return this.findOne(userId, jobId);
@@ -131,7 +141,9 @@ export class JobsRepository {
 
     if (applied_at) {
       query =
-        'UPDATE jobs SET status = $1, updated_at = $2, applied_at = $3 WHERE user_id = $4 AND id = $5 RETURNING *';
+        `UPDATE jobs SET status = $1, updated_at = $2, applied_at = $3,
+           follow_up_at = $3::timestamptz + interval '7 days', follow_up_sent = false
+         WHERE user_id = $4 AND id = $5 RETURNING *`;
       values = [status, new Date(), applied_at, userId, jobId];
     }
 

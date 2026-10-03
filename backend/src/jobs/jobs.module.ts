@@ -7,9 +7,10 @@ import { NotesController } from './notes.controller';
 import { NotesRepository } from './notes.repository';
 import { DbModule } from '../db/db.module';
 import { AuthModule } from '../auth/auth.module';
+import { AiModule } from '../ai/ai.module';
 
 @Module({
-  imports: [DbModule, AuthModule],
+  imports: [DbModule, AuthModule, AiModule],
   controllers: [JobsController, NotesController],
   providers: [JobsService, JobsRepository, NotesService, NotesRepository],
 })

@@ -111,6 +111,25 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
        WHERE status::text = 'SCREENING';
 
       CREATE INDEX IF NOT EXISTS idx_jobs_user_id ON jobs(user_id);
+
+      ALTER TABLE jobs ADD COLUMN IF NOT EXISTS match_score int;
+      ALTER TABLE jobs ADD COLUMN IF NOT EXISTS match_skills_matched text[];
+      ALTER TABLE jobs ADD COLUMN IF NOT EXISTS match_skills_missing text[];
+      ALTER TABLE jobs ADD COLUMN IF NOT EXISTS match_computed_at timestamptz;
+
+      ALTER TABLE jobs ADD COLUMN IF NOT EXISTS follow_up_at timestamptz;
+      ALTER TABLE jobs ADD COLUMN IF NOT EXISTS follow_up_sent boolean DEFAULT false;
+
+      CREATE TABLE IF NOT EXISTS notifications (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id uuid REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+        job_id uuid REFERENCES jobs(id) ON DELETE CASCADE,
+        type text NOT NULL,
+        body text NOT NULL,
+        read boolean NOT NULL DEFAULT false,
+        created_at timestamptz DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
       CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_user_url ON jobs(user_id, url) WHERE url IS NOT NULL;
 
@@ -209,6 +228,18 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
       );
       CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_hash ON password_reset_tokens(token_hash);
       CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user ON password_reset_tokens(user_id);
+
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_calls_this_month int NOT NULL DEFAULT 0;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_calls_reset_at timestamptz;
+
+      CREATE TABLE IF NOT EXISTS user_profiles (
+        user_id uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        headline text,
+        years_experience int,
+        skills text[],
+        bio text,
+        updated_at timestamptz DEFAULT now()
+      );
     `);
   }
 }

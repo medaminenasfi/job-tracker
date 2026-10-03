@@ -34,6 +34,7 @@ export interface SavedJob {
   company: string;
   url?: string | null;
   status: JobStatus;
+  match_score?: number | null;
 }
 
 export interface ApiResult<T = unknown> {

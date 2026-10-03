@@ -37,6 +37,12 @@ export interface Job {
   employment_type?: string;
   status: JobStatus;
   notes?: string;
+  match_score?: number | null;
+  match_skills_matched?: string[] | null;
+  match_skills_missing?: string[] | null;
+  match_computed_at?: string | null;
+  follow_up_at?: string | null;
+  follow_up_sent?: boolean | null;
   saved_at?: string;
   applied_at?: string;
   created_at?: string;
@@ -148,6 +154,7 @@ export interface DashboardSummary {
     extensionConnected: boolean;
     firstJobSaved: boolean;
     appliedJob: boolean;
+    profileFilled?: boolean;
   };
   announcements: Announcement[];
 }

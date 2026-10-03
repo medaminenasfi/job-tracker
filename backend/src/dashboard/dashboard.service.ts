@@ -44,7 +44,8 @@ export class DashboardService {
         this.db.query(
           `SELECT
              EXISTS(SELECT 1 FROM jobs WHERE user_id = $1 AND source IS NOT NULL) AS extension,
-             EXISTS(SELECT 1 FROM jobs WHERE user_id = $1 AND (applied_at IS NOT NULL OR status <> 'SAVED')) AS applied`,
+             EXISTS(SELECT 1 FROM jobs WHERE user_id = $1 AND (applied_at IS NOT NULL OR status <> 'SAVED')) AS applied,
+              EXISTS(SELECT 1 FROM user_profiles WHERE user_id = $1 AND skills IS NOT NULL AND array_length(skills, 1) > 0) AS profile`,
           [userId],
         ),
         this.db.query(
@@ -79,6 +80,7 @@ export class DashboardService {
         extensionConnected: Boolean(flags.extension),
         firstJobSaved: counts.total > 0,
         appliedJob: Boolean(flags.applied),
+        profileFilled: Boolean(flags.profile),
       },
       announcements: ANNOUNCEMENTS,
     };

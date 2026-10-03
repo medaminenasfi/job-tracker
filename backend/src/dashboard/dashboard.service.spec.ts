@@ -14,7 +14,7 @@ describe('DashboardService', () => {
   function mockQueries(opts: {
     status?: { status: string; count: number }[];
     activity?: { week: number; month: number };
-    flags?: { extension: boolean; applied: boolean };
+    flags?: { extension: boolean; applied: boolean; profile?: boolean };
     recent?: unknown[];
     spark?: { day: string; count: number }[];
   }) {
@@ -22,7 +22,7 @@ describe('DashboardService', () => {
       .mockResolvedValueOnce({ rows: opts.status ?? [] })
       .mockResolvedValueOnce({ rows: [opts.activity ?? { week: 0, month: 0 }] })
       .mockResolvedValueOnce({
-        rows: [opts.flags ?? { extension: false, applied: false }],
+        rows: [opts.flags ?? { extension: false, applied: false, profile: false }],
       })
       .mockResolvedValueOnce({ rows: opts.recent ?? [] })
       .mockResolvedValueOnce({ rows: opts.spark ?? [] });
@@ -58,6 +58,7 @@ describe('DashboardService', () => {
       extensionConnected: true,
       firstJobSaved: true,
       appliedJob: true,
+      profileFilled: false,
     });
     expect(summary.announcements.length).toBeGreaterThan(0);
   });
@@ -80,6 +81,7 @@ describe('DashboardService', () => {
       extensionConnected: false,
       firstJobSaved: false,
       appliedJob: false,
+      profileFilled: false,
     });
   });
 

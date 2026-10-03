@@ -45,6 +45,7 @@ const SECTIONS: { heading: string; body: string[] }[] = [
     body: [
       'Google (sign-in): if you choose \u201cContinue with Google\u201d, Google authenticates you and shares the profile fields listed above. See Google\u2019s privacy policy for how Google handles that data.',
       'Cloudflare Turnstile (bot protection): verifies that login/registration requests come from a human. See Cloudflare\u2019s privacy policy for details.',
+      'OpenRouter (AI features): when you use AI job matching, the job description and your profile (headline, years of experience, skills) are sent to OpenRouter\u2019s model providers to compute the match. AI calls are capped per account per month, and results are validated before they are stored.',
     ],
   },
   {

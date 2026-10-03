@@ -327,6 +327,11 @@ export function Popup() {
                   <span className={`status-badge status-${matchedJob.status.toLowerCase()}`}>
                     {matchedJob.status}
                   </span>
+                  {typeof matchedJob.match_score === 'number' && (
+                    <span className="status-badge" style={{ background: '#e0e7ff', color: '#3730a3' }}>
+                      {matchedJob.match_score}% match
+                    </span>
+                  )}
                 </p>
                 <button
                   onClick={() => markApplied(matchedJob.id)}

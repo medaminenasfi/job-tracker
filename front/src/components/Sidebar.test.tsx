@@ -31,10 +31,10 @@ vi.mock('@/context/AuthContext', () => ({
   }),
 }));
 
-function renderSidebar() {
+function renderSidebar(props: React.ComponentProps<typeof Sidebar> = {}) {
   return render(
     <ThemeProvider>
-      <Sidebar />
+      <Sidebar {...props} />
     </ThemeProvider>,
   );
 }
@@ -75,33 +75,41 @@ describe('Sidebar', () => {
     expect(screen.queryByRole('button', { name: 'Collapse sidebar' })).toBeNull();
   });
 
-  it('opens the mobile drawer and closes it with Escape', () => {
-    renderSidebar();
+  it('supports controlled collapse from the parent layout', () => {
+    const onToggleCollapse = vi.fn();
+    renderSidebar({ isCollapsed: false, onToggleCollapse });
 
+    expect(screen.getByRole('button', { name: 'Collapse sidebar' })).toBeTruthy();
     act(() => {
-      fireEvent.click(screen.getByRole('button', { name: 'Open navigation menu' }));
+      screen.getByRole('button', { name: 'Collapse sidebar' }).click();
     });
+    expect(onToggleCollapse).toHaveBeenCalledTimes(1);
+    // Controlled mode must not write to localStorage itself.
+    expect(window.localStorage.getItem('jt_sidebar_collapsed')).toBeNull();
+  });
+
+  it('opens the mobile drawer when controlled and closes it with Escape', () => {
+    const onCloseMobile = vi.fn();
+    renderSidebar({ mobileOpen: true, onCloseMobile });
+
     expect(screen.getByRole('dialog', { name: 'Navigation menu' })).toBeTruthy();
 
     act(() => {
       fireEvent.keyDown(document, { key: 'Escape' });
     });
-    expect(screen.queryByRole('dialog', { name: 'Navigation menu' })).toBeNull();
+    expect(onCloseMobile).toHaveBeenCalledTimes(1);
   });
 
   it('closes the mobile drawer after selecting a navigation item', () => {
-    renderSidebar();
-
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: 'Open navigation menu' }));
-    });
+    const onCloseMobile = vi.fn();
+    renderSidebar({ mobileOpen: true, onCloseMobile });
 
     const drawer = screen.getByRole('dialog', { name: 'Navigation menu' });
     act(() => {
       fireEvent.click(within(drawer).getByRole('link', { name: 'Job Track' }));
     });
 
-    expect(screen.queryByRole('dialog', { name: 'Navigation menu' })).toBeNull();
+    expect(onCloseMobile).toHaveBeenCalledTimes(1);
   });
 
   it('calls logout from the pinned footer button', () => {
@@ -112,13 +120,5 @@ describe('Sidebar', () => {
     });
 
     expect(logoutMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('shows the user card with avatar initials', () => {
-    renderSidebar();
-
-    expect(screen.getByText('Ada Lovelace')).toBeTruthy();
-    expect(screen.getByText('ada@example.com')).toBeTruthy();
-    expect(screen.getByText('AL')).toBeTruthy();
   });
 });

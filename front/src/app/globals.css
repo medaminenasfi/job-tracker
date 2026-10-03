@@ -11,13 +11,23 @@
   --foreground: #18181b;
   --card: #ffffff;
   --card-foreground: #18181b;
+  /* Surface elevated: popovers, dropdowns, modals — sits above --card. */
+  --popover: #ffffff;
+  --popover-foreground: #18181b;
   --muted: #f4f4f5;
   --muted-foreground: #52525b;
   --border: #e4e4e7;
   --input: #d4d4d8;
   --accent: #2563eb;
   --accent-hover: #1d4ed8;
+  --accent-foreground: #ffffff;
   --ring: #2563eb;
+  /* Semantic feedback colors. Use as text/border/icon directly, or with an
+     alpha (bg-success/10) for soft surfaces — they theme in both modes. */
+  --success: #059669;
+  --warning: #d97706;
+  --danger: #e11d48;
+  --info: #0284c7;
   --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.08);
   --shadow-card-hover: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 }
@@ -28,13 +38,22 @@
   --foreground: #fafafa;
   --card: #18181b;
   --card-foreground: #fafafa;
+  /* Elevated surfaces read slightly lighter than --card in dark mode. */
+  --popover: #1f1f23;
+  --popover-foreground: #fafafa;
   --muted: #27272a;
   --muted-foreground: #a1a1aa;
   --border: #3f3f46;
   --input: #52525b;
   --accent: #3b82f6;
   --accent-hover: #60a5fa;
+  --accent-foreground: #ffffff;
   --ring: #60a5fa;
+  /* Brightened for contrast against deep backgrounds (not inverted). */
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #fb7185;
+  --info: #38bdf8;
   --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.5), 0 1px 2px -1px rgb(0 0 0 / 0.5);
   --shadow-card-hover: 0 10px 15px -3px rgb(0 0 0 / 0.45), 0 4px 6px -4px rgb(0 0 0 / 0.45);
 }
@@ -45,6 +64,8 @@ body {
   overflow-x: hidden;
   background: var(--background);
   color: var(--foreground);
+  /* Subtle theme crossfade — only bg/color, never layout properties. */
+  transition: background-color 250ms ease, color 250ms ease;
 }
 
 button,
