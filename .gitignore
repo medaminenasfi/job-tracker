@@ -11,3 +11,6 @@ coverage/
 build/
 .DS_Store
 *.log
+
+# Uploaded CV files (MVP3) — never commit user documents.
+uploads/

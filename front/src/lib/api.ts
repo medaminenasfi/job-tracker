@@ -78,8 +78,12 @@ function refreshAccessToken(scope: TokenScope): Promise<boolean> {
 
 export async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const scope = scopeFor(path);
+  // Multipart uploads (CV files) must let the browser set the
+  // Content-Type boundary — only default it for JSON payloads.
+  const isFormData =
+    typeof FormData !== 'undefined' && options.body instanceof FormData;
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...(options.headers as Record<string, string>),
   };
 

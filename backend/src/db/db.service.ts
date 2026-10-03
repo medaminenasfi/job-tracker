@@ -241,5 +241,23 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
         updated_at timestamptz DEFAULT now()
       );
     `);
+
+    // MVP3 Phase 1 — CV upload & text extraction. jobs.cv_id references the
+    // CV the application was submitted with; SET NULL keeps jobs intact
+    // when a CV is deleted.
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS cvs (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        label text NOT NULL,
+        source text NOT NULL DEFAULT 'uploaded',
+        file_url text,
+        parsed_text text,
+        is_default boolean NOT NULL DEFAULT false,
+        created_at timestamptz DEFAULT now()
+      );
+
+      ALTER TABLE jobs ADD COLUMN IF NOT EXISTS cv_id uuid REFERENCES cvs(id) ON DELETE SET NULL;
+    `);
   }
 }

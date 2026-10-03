@@ -43,10 +43,23 @@ export interface Job {
   match_computed_at?: string | null;
   follow_up_at?: string | null;
   follow_up_sent?: boolean | null;
+  cv_id?: string | null;
   saved_at?: string;
   applied_at?: string;
   created_at?: string;
   updated_at?: string;
+}
+
+// A managed CV (MVP3 Phase 1). parsed_text is stored server-side; the
+// list endpoint returns text_length instead of the full text.
+export interface Cv {
+  id: string;
+  label: string;
+  source: string;
+  file_url?: string | null;
+  is_default: boolean;
+  created_at: string;
+  text_length?: number | null;
 }
 
 export interface AuthResponse {

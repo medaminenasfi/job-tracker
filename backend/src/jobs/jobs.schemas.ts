@@ -42,10 +42,17 @@ export const createJobSchema = z.object({
   employment_type: optionalText(100),
   status: jobStatusSchema.optional(),
   notes: optionalText(20000),
+  cv_id: z.preprocess(emptyToUndefined, z.string().uuid().optional()),
 });
 
 export const updateJobSchema = createJobSchema.partial().extend({
   notes: clearableText(20000),
+  // Empty string or null clears the CV link.
+  cv_id: z.preprocess(
+    (value) =>
+      typeof value === 'string' && value.trim() === '' ? null : value,
+    z.string().uuid().nullable().optional(),
+  ),
 });
 
 export const updateStatusSchema = z.object({ status: jobStatusSchema });

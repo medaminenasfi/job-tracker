@@ -82,7 +82,8 @@ describe('JobsRepository.create', () => {
   it('coerces missing optional fields to null', async () => {
     await repo.create('user-1', { title: 'Eng', company: 'Acme' });
     const [, values] = query.mock.calls[0];
-    // [user_id, title, company, location, url, source, description, salary, employment_type, status, notes]
+    // [user_id, title, company, location, url, source, description,
+    //  salary, employment_type, status, notes, cv_id]
     expect(values).toEqual([
       'user-1',
       'Eng',
@@ -94,6 +95,7 @@ describe('JobsRepository.create', () => {
       null,
       null,
       'SAVED',
+      null,
       null,
     ]);
   });

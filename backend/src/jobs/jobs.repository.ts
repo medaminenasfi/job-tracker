@@ -16,6 +16,7 @@ const UPDATABLE_JOB_FIELDS = new Set([
   'employment_type',
   'status',
   'notes',
+  'cv_id',
 ]);
 
 // Treat a missing, empty, or whitespace-only url as NULL. The unique dedup index
@@ -42,8 +43,8 @@ export class JobsRepository {
     // exempt (partial index) so multiple url-less manual entries are allowed.
     const result = await this.db.query(
       `
-      INSERT INTO jobs (user_id, title, company, location, url, source, description, salary, employment_type, status, notes)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      INSERT INTO jobs (user_id, title, company, location, url, source, description, salary, employment_type, status, notes, cv_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       ON CONFLICT (user_id, url) WHERE url IS NOT NULL
       DO UPDATE SET updated_at = now()
       RETURNING *
@@ -60,6 +61,7 @@ export class JobsRepository {
         data.employment_type ?? null,
         data.status || 'SAVED',
         data.notes ?? null,
+        data.cv_id ?? null,
       ],
     );
     return result.rows[0];

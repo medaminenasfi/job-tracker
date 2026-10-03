@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiFetch } from '@/lib/api';
-import { JobStatus } from '@/lib/types';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { apiFetch, apiJson } from '@/lib/api';
+import { Cv, JobStatus } from '@/lib/types';
 import { ButtonLoader } from '@/components/ui/Loading';
 import { DEFAULT_STATUS_NAMES, statusLabel, useJobStatuses } from '@/lib/useJobStatuses';
 
@@ -16,6 +16,10 @@ export function AddJobModal({ isOpen, onClose }: AddJobModalProps) {
   const queryClient = useQueryClient();
   const { data: statusConfigs } = useJobStatuses();
   const statuses = statusConfigs?.map((status) => status.name) ?? DEFAULT_STATUS_NAMES;
+  const { data: cvs = [] } = useQuery<Cv[]>({
+    queryKey: ['cvs'],
+    queryFn: () => apiJson('/api/cvs'),
+  });
   const [formData, setFormData] = useState({
     title: '',
     company: '',
@@ -27,6 +31,7 @@ export function AddJobModal({ isOpen, onClose }: AddJobModalProps) {
     employment_type: '',
     status: 'SAVED' as JobStatus,
     notes: '',
+    cv_id: '',
   });
 
   const createJobMutation = useMutation({
@@ -52,6 +57,7 @@ export function AddJobModal({ isOpen, onClose }: AddJobModalProps) {
         employment_type: '',
         status: 'SAVED',
         notes: '',
+        cv_id: '',
       });
     },
   });
@@ -141,6 +147,22 @@ export function AddJobModal({ isOpen, onClose }: AddJobModalProps) {
               className="w-full border border-input rounded-lg px-4 py-2 text-foreground focus:outline-none focus:border-ring"
               placeholder="$120,000 - $150,000"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1">CV</label>
+            <select
+              value={formData.cv_id}
+              onChange={(e) => setFormData({ ...formData, cv_id: e.target.value })}
+              className="w-full border border-input rounded-lg px-4 py-2 text-foreground focus:outline-none focus:border-ring"
+            >
+              <option value="">None</option>
+              {cvs.map((cv) => (
+                <option key={cv.id} value={cv.id}>
+                  {cv.label}{cv.is_default ? ' (default)' : ''}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>

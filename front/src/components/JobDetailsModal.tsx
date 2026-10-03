@@ -9,7 +9,7 @@ import {
 } from '@tanstack/react-query';
 import { ExternalLink, MapPin, X } from 'lucide-react';
 import { apiFetch, apiJson } from '@/lib/api';
-import { Job, JobNote, JobStatus } from '@/lib/types';
+import { Cv, Job, JobNote, JobStatus } from '@/lib/types';
 import { ButtonLoader } from '@/components/ui/Loading';
 import { StatusBadge } from '@/components/ui/Badge';
 import { JobDescription } from '@/components/JobDescription';
@@ -24,6 +24,27 @@ interface JobDetailsModalProps {
 export function JobDetailsModal({ job, isOpen, onClose }: JobDetailsModalProps) {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<JobStatus>(job?.status || 'SAVED');
+  const { data: cvs = [] } = useQuery<Cv[]>({
+    queryKey: ['cvs'],
+    queryFn: () => apiJson('/api/cvs'),
+  });
+
+  // Sync the local CV selection when a different job is opened.
+  const [cvId, setCvId] = useState(job?.cv_id ?? '');
+  useEffect(() => {
+    setCvId(job?.cv_id ?? '');
+  }, [job?.id, job?.cv_id]);
+
+  const cvMutation = useMutation({
+    mutationFn: (nextCvId: string | null) =>
+      apiJson(`/api/jobs/${jobId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ cv_id: nextCvId }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['jobs'] });
+    },
+  });
   const [noteMsg, setNoteMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [matchError, setMatchError] = useState<string | null>(null);
   const [matchResult, setMatchResult] = useState<{
@@ -367,6 +388,29 @@ export function JobDetailsModal({ job, isOpen, onClose }: JobDetailsModalProps) 
               {followUpMutation.isError && (
                 <span className="text-xs text-danger">{(followUpMutation.error as Error).message}</span>
               )}
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <label className="text-xs font-medium text-muted-foreground" htmlFor="job-cv">
+                CV:
+              </label>
+              <select
+                id="job-cv"
+                value={cvId}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setCvId(next);
+                  cvMutation.mutate(next || null);
+                }}
+                className="rounded-lg border border-input px-2 py-1 text-sm text-foreground focus:outline-none focus:border-ring"
+              >
+                <option value="">None</option>
+                {cvs.map((cv) => (
+                  <option key={cv.id} value={cv.id}>
+                    {cv.label}{cv.is_default ? ' (default)' : ''}
+                  </option>
+                ))}
+              </select>
             </div>
           </section>
 

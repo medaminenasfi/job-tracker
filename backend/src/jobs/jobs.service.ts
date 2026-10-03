@@ -41,6 +41,7 @@ export class JobsService {
       throw new BadRequestException(reason);
     }
     await this.assertStatus(userId, parsed.data.status);
+    await this.assertCvOwnership(userId, parsed.data.cv_id);
     return this.jobsRepository.create(userId, parsed.data);
   }
 
@@ -68,6 +69,7 @@ export class JobsService {
       );
     }
     await this.assertStatus(userId, parsed.data.status);
+    await this.assertCvOwnership(userId, parsed.data.cv_id);
     const job = await this.jobsRepository.update(userId, jobId, parsed.data);
     if (!job) throw new NotFoundException('Job not found');
     return job;
@@ -199,5 +201,17 @@ export class JobsService {
     );
     if (!result.rows[0])
       throw new BadRequestException('Status is not configured for this user');
+  }
+
+  // A job may only reference the user's own CVs — cv_id is client-supplied,
+  // so verify ownership before it reaches the repository.
+  private async assertCvOwnership(userId: string, cvId?: string | null) {
+    if (!cvId) return;
+    if (!this.db) throw new ServiceUnavailableException('DB unavailable');
+    const result = await this.db.query(
+      'SELECT 1 FROM cvs WHERE id = $1 AND user_id = $2',
+      [cvId, userId],
+    );
+    if (!result.rows[0]) throw new BadRequestException('CV not found');
   }
 }

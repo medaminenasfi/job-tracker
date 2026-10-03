@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, X, User } from 'lucide-react';
+import { Plus, X, User, FileText } from 'lucide-react';
 import { apiJson } from '@/lib/api';
 import { SectionLoader } from '@/components/ui/Loading';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -86,6 +87,14 @@ export default function ProfilePage() {
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6 p-4 sm:p-6 lg:p-8">
       <PageHeader title="Profile" subtitle="Powers your AI job match scores" />
+
+      <Link
+        href="/dashboard/profile/cvs"
+        className="inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline"
+      >
+        <FileText className="h-4 w-4" aria-hidden />
+        Manage CVs (upload &amp; attach to applications)
+      </Link>
 
       {empty && (
         <Alert tone="warning">
