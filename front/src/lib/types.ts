@@ -52,6 +52,21 @@ export interface Job {
 
 // A managed CV (MVP3 Phase 1). parsed_text is stored server-side; the
 // list endpoint returns text_length instead of the full text.
+export interface CvEntry {
+  text: string;
+  dateRange?: string;
+}
+
+export interface CvStructuredData {
+  fullName?: string;
+  email?: string;
+  phone?: string;
+  links?: string[];
+  experience: CvEntry[];
+  education: CvEntry[];
+  skills: string[];
+}
+
 export interface Cv {
   id: string;
   label: string;
@@ -60,6 +75,10 @@ export interface Cv {
   is_default: boolean;
   created_at: string;
   text_length?: number | null;
+  structured_data?: CvStructuredData | null;
+  parse_method?: 'rule_based' | 'ai' | null;
+  parse_status?: 'pending' | 'parsed' | 'partial' | 'failed' | null;
+  parsed_at?: string | null;
 }
 
 export interface AuthResponse {

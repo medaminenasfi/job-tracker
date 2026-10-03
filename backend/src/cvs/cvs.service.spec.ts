@@ -17,6 +17,10 @@ jest.mock('mammoth', () => ({ extractRawText: extractRawTextMock }));
 const mkdirMock = jest.fn<() => Promise<void>>();
 const writeFileMock = jest.fn<(path: string, data: Buffer) => Promise<void>>();
 const unlinkMock = jest.fn<(path: string) => Promise<void>>();
+const aiParserMock =
+  jest.fn<(text: string) => Promise<Record<string, unknown>>>();
+const enforceMonthlyCapMock = jest.fn<(userId: string) => Promise<void>>();
+const recordCallMock = jest.fn<(userId: string) => Promise<void>>();
 jest.mock('fs/promises', () => ({
   mkdir: mkdirMock,
   writeFile: writeFileMock,
@@ -24,6 +28,9 @@ jest.mock('fs/promises', () => ({
 }));
 
 import { CvsService, cvMaxBytes } from './cvs.service';
+import { CvRuleParserService } from './cv-rule-parser';
+import { CvAiParserService } from './cv-ai-parser';
+import { AiService } from '../ai/ai.service';
 import { DbService } from '../db/db.service';
 
 const queryMock =
@@ -36,7 +43,13 @@ const queryMock =
 
 function makeService() {
   const db = { query: queryMock } as unknown as DbService;
-  return new CvsService(db);
+  const ruleParser = new CvRuleParserService();
+  const aiParser = { parse: aiParserMock } as unknown as CvAiParserService;
+  const ai = {
+    enforceMonthlyCap: enforceMonthlyCapMock,
+    recordCall: recordCallMock,
+  } as unknown as AiService;
+  return new CvsService(db, ruleParser, aiParser, ai);
 }
 
 function makeFile(buffer: Buffer, size = buffer.length): Express.Multer.File {
@@ -59,6 +72,9 @@ beforeEach(() => {
   mkdirMock.mockReset();
   writeFileMock.mockReset();
   unlinkMock.mockReset();
+  aiParserMock.mockReset();
+  enforceMonthlyCapMock.mockReset();
+  recordCallMock.mockReset();
 });
 
 describe('CvsService', () => {
@@ -89,7 +105,15 @@ describe('CvsService', () => {
       );
       expect(queryMock).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO cvs'),
-        ['cv1', 'user1', 'Dev CV', '/api/cvs/cv1/file', 'pdf text'],
+        [
+          'cv1',
+          'user1',
+          'Dev CV',
+          '/api/cvs/cv1/file',
+          'pdf text',
+          expect.any(String), // structured_data JSON
+          'failed', // 'pdf text' has no recognizable sections
+        ],
       );
       expect(row).toEqual({ id: 'cv1' });
     });
@@ -219,6 +243,77 @@ describe('CvsService', () => {
       await expect(service.remove('user1', 'other-user-cv')).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('parseCv', () => {
+    const cvRow = {
+      id: 'cv1',
+      user_id: 'user1',
+      label: 'Dev CV',
+      parsed_text: 'raw text',
+      structured_data: null,
+    };
+
+    it('runs the AI parser with cap enforcement and records the call', async () => {
+      queryMock.mockResolvedValueOnce({ rows: [cvRow] }).mockResolvedValue({
+        rows: [{ ...cvRow, parse_method: 'ai', parse_status: 'parsed' }],
+      });
+      aiParserMock.mockResolvedValue({ fullName: 'Jane', skills: ['TS'] });
+      enforceMonthlyCapMock.mockResolvedValue(undefined);
+      recordCallMock.mockResolvedValue(undefined);
+      const service = makeService();
+
+      const row = await service.parseCv('user1', 'cv1', 'ai');
+
+      expect(enforceMonthlyCapMock).toHaveBeenCalledWith('user1');
+      expect(aiParserMock).toHaveBeenCalledWith('raw text');
+      expect(recordCallMock).toHaveBeenCalledWith('user1');
+      expect(queryMock).toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE cvs SET structured_data'),
+        [
+          JSON.stringify({ fullName: 'Jane', skills: ['TS'] }),
+          'ai',
+          'parsed',
+          'cv1',
+          'user1',
+        ],
+      );
+      expect(row).toMatchObject({ parse_method: 'ai', parse_status: 'parsed' });
+    });
+
+    it('rejects an invalid method', async () => {
+      const service = makeService();
+      await expect(service.parseCv('user1', 'cv1', 'magic')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('throws NotFound for another user CV', async () => {
+      queryMock.mockResolvedValue({ rows: [] });
+      const service = makeService();
+      await expect(
+        service.parseCv('user1', 'other-user-cv', 'rule'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('re-runs the rule parser without any AI call', async () => {
+      queryMock
+        .mockResolvedValueOnce({
+          rows: [{ ...cvRow, parsed_text: 'Skills\nPython, AWS' }],
+        })
+        .mockResolvedValue({
+          rows: [
+            { ...cvRow, parse_method: 'rule_based', parse_status: 'partial' },
+          ],
+        });
+      const service = makeService();
+
+      const row = await service.parseCv('user1', 'cv1', 'rule');
+
+      expect(aiParserMock).not.toHaveBeenCalled();
+      expect(row.parse_method).toBe('rule_based');
+      expect(row.parse_status).toBe('partial');
     });
   });
 });

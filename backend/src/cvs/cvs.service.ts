@@ -6,10 +6,17 @@ import {
 import { randomUUID } from 'crypto';
 import { mkdir, unlink, writeFile } from 'fs/promises';
 import { join } from 'path';
+import { z } from 'zod';
 import pdfParse from 'pdf-parse';
 import * as mammoth from 'mammoth';
 import { DbService } from '../db/db.service';
+import { AiService } from '../ai/ai.service';
+import { CvAiParserService } from './cv-ai-parser';
+import { CvRuleParserService } from './cv-rule-parser';
 import { cvLabelSchema, updateCvSchema } from './cvs.schemas';
+import { CvStructuredData } from './cv-schemas';
+
+const parseMethodSchema = z.enum(['rule', 'ai']);
 
 // Magic bytes identify the real format — the client-supplied MIME type
 // and extension are never trusted (AGENTS.md: validate untrusted input).
@@ -28,6 +35,10 @@ export interface CvRow {
   source: string;
   file_url: string | null;
   parsed_text?: string | null;
+  structured_data?: CvStructuredData | null;
+  parse_method?: 'rule_based' | 'ai' | null;
+  parse_status?: 'pending' | 'parsed' | 'partial' | 'failed' | null;
+  parsed_at?: string | null;
   is_default: boolean;
   created_at: string;
 }
@@ -40,6 +51,10 @@ export interface CvListRow {
   is_default: boolean;
   created_at: string;
   text_length: number | null;
+  structured_data?: CvStructuredData | null;
+  parse_method?: 'rule_based' | 'ai' | null;
+  parse_status?: 'pending' | 'parsed' | 'partial' | 'failed' | null;
+  parsed_at?: string | null;
 }
 
 // Shared by the controller (multer hard limit) and the service
@@ -56,7 +71,12 @@ export function cvMaxLabel(): string {
 
 @Injectable()
 export class CvsService {
-  constructor(private readonly db: DbService) {}
+  constructor(
+    private readonly db: DbService,
+    private readonly ruleParser: CvRuleParserService,
+    private readonly aiParser: CvAiParserService,
+    private readonly ai: AiService,
+  ) {}
 
   get uploadsDir(): string {
     return join(process.cwd(), 'uploads', 'cvs');
@@ -112,11 +132,24 @@ export class CvsService {
     await mkdir(this.uploadsDir, { recursive: true });
     await writeFile(join(this.uploadsDir, `${id}.${kind}`), file.buffer);
 
+    // Rule-based parsing runs synchronously on upload — free, no AI call.
+    const ruleResult = this.ruleParser.parse(parsedText);
+
     const result = await this.db.query(
-      `INSERT INTO cvs (id, user_id, label, source, file_url, parsed_text)
-       VALUES ($1, $2, $3, 'uploaded', $4, $5)
-       RETURNING id, user_id, label, source, file_url, is_default, created_at`,
-      [id, userId, parsedLabel.data, `/api/cvs/${id}/file`, parsedText],
+      `INSERT INTO cvs (id, user_id, label, source, file_url, parsed_text,
+                        structured_data, parse_method, parse_status, parsed_at)
+       VALUES ($1, $2, $3, 'uploaded', $4, $5, $6, 'rule_based', $7, now())
+       RETURNING id, user_id, label, source, file_url, is_default, created_at,
+                 structured_data, parse_method, parse_status, parsed_at`,
+      [
+        id,
+        userId,
+        parsedLabel.data,
+        `/api/cvs/${id}/file`,
+        parsedText,
+        JSON.stringify(ruleResult.data),
+        ruleResult.status,
+      ],
     );
     return result.rows[0] as CvRow;
   }
@@ -126,12 +159,60 @@ export class CvsService {
   async findAll(userId: string) {
     const result = await this.db.query(
       `SELECT id, label, source, file_url, is_default, created_at,
-              length(parsed_text) AS text_length
+              length(parsed_text) AS text_length,
+              structured_data, parse_method, parse_status, parsed_at
        FROM cvs WHERE user_id = $1
        ORDER BY is_default DESC, created_at DESC`,
       [userId],
     );
     return result.rows as CvListRow[];
+  }
+
+  // Explicit re-parse. 'ai' costs money and counts against the monthly cap,
+  // so it is never triggered silently — only via this endpoint.
+  async parseCv(userId: string, cvId: string, method: unknown) {
+    const parsed = parseMethodSchema.safeParse(method);
+    if (!parsed.success) {
+      throw new BadRequestException('method must be "rule" or "ai"');
+    }
+    const cv = await this.findOne(userId, cvId);
+
+    if (parsed.data === 'ai') {
+      if (!cv.parsed_text) {
+        throw new BadRequestException('No extracted text to parse');
+      }
+      await this.ai.enforceMonthlyCap(userId);
+      const data = await this.aiParser.parse(cv.parsed_text);
+      await this.ai.recordCall(userId);
+      return this.storeParse(cvId, userId, data, 'ai', 'parsed');
+    }
+
+    const ruleResult = this.ruleParser.parse(cv.parsed_text ?? '');
+    return this.storeParse(
+      cvId,
+      userId,
+      ruleResult.data,
+      'rule_based',
+      ruleResult.status,
+    );
+  }
+
+  private async storeParse(
+    cvId: string,
+    userId: string,
+    data: CvStructuredData,
+    method: 'rule_based' | 'ai',
+    status: 'parsed' | 'partial' | 'failed',
+  ) {
+    const result = await this.db.query(
+      `UPDATE cvs SET structured_data = $1, parse_method = $2,
+                      parse_status = $3, parsed_at = now()
+       WHERE id = $4 AND user_id = $5
+       RETURNING id, user_id, label, source, file_url, is_default, created_at,
+                 structured_data, parse_method, parse_status, parsed_at`,
+      [JSON.stringify(data), method, status, cvId, userId],
+    );
+    return result.rows[0] as CvRow;
   }
 
   async update(userId: string, cvId: string, data: unknown) {

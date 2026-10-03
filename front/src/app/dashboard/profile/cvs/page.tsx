@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Download, Pencil, Plus, Star, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, Download, Pencil, Plus, Star, Trash2, X, Sparkles } from 'lucide-react';
 import { apiFetch, apiJson, extractMessage } from '@/lib/api';
 import { SectionLoader } from '@/components/ui/Loading';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -26,6 +26,7 @@ export default function CvsPage() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState('');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const flash = (type: 'success' | 'error', text: string) => {
@@ -84,6 +85,16 @@ export default function CvsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cvs'] });
       flash('success', 'CV deleted.');
+    },
+    onError: (e: Error) => flash('error', e.message),
+  });
+
+  const parseMutation = useMutation({
+    mutationFn: (cv: Cv) =>
+      apiJson(`/api/cvs/${cv.id}/parse?method=ai`, { method: 'POST' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cvs'] });
+      flash('success', 'AI parsing complete.');
     },
     onError: (e: Error) => flash('error', e.message),
   });
@@ -234,65 +245,246 @@ export default function CvsPage() {
                       </button>
                     </div>
                   ) : (
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-foreground">
-                          {cv.label}
-                          {cv.is_default && (
-                            <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 text-xs font-semibold text-accent">
-                              Default
+                    <>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-foreground">
+                            {cv.label}
+                            {cv.is_default && (
+                              <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 text-xs font-semibold text-accent">
+                                Default
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {cv.source === 'uploaded' ? 'Uploaded' : cv.source}
+                            {cv.text_length != null &&
+                              ` · ${cv.text_length.toLocaleString()} chars extracted`}
+                            {' · '}
+                            {new Date(cv.created_at).toLocaleDateString()}
+                          </p>
+                          <p className="mt-1 flex flex-wrap items-center gap-1.5">
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                                cv.parse_status === 'parsed'
+                                  ? 'bg-success/15 text-success'
+                                  : cv.parse_status === 'partial'
+                                    ? 'bg-warning/15 text-warning'
+                                    : cv.parse_status === 'failed'
+                                      ? 'bg-danger/15 text-danger'
+                                      : 'bg-muted text-muted-foreground'
+                              }`}
+                            >
+                              {cv.parse_status === 'parsed'
+                                ? 'Parsed'
+                                : cv.parse_status === 'partial'
+                                  ? 'Partial'
+                                  : cv.parse_status === 'failed'
+                                    ? 'Failed'
+                                    : 'Pending'}
                             </span>
+                            <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                              {cv.parse_method === 'ai' ? 'AI parsing' : 'Rule-based'}
+                            </span>
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpandedId(expandedId === cv.id ? null : cv.id)
+                            }
+                            aria-label={
+                              expandedId === cv.id
+                                ? `Hide parsed data for ${cv.label}`
+                                : `Show parsed data for ${cv.label}`
+                            }
+                            aria-expanded={expandedId === cv.id}
+                            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted"
+                          >
+                            <ChevronDown
+                              className={`h-4 w-4 transition-transform ${
+                                expandedId === cv.id ? 'rotate-180' : ''
+                              }`}
+                              aria-hidden
+                            />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => toggleDefaultMutation.mutate(cv)}
+                            aria-label={cv.is_default ? 'Unset default CV' : 'Set as default CV'}
+                            title={cv.is_default ? 'Unset default' : 'Set as default'}
+                            className={`rounded-lg p-2 transition-colors hover:bg-muted ${
+                              cv.is_default ? 'text-accent' : 'text-muted-foreground'
+                            }`}
+                          >
+                            <Star className="h-4 w-4" aria-hidden />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingId(cv.id);
+                              setEditLabel(cv.label);
+                            }}
+                            aria-label={`Rename ${cv.label}`}
+                            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted"
+                          >
+                            <Pencil className="h-4 w-4" aria-hidden />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => downloadMutation.mutate(cv)}
+                            aria-label={`Download ${cv.label}`}
+                            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted"
+                          >
+                            <Download className="h-4 w-4" aria-hidden />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteMutation.mutate(cv.id)}
+                            aria-label={`Delete ${cv.label}`}
+                            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-danger"
+                          >
+                            <Trash2 className="h-4 w-4" aria-hidden />
+                          </button>
+                        </div>
+                      </div>
+
+                      {expandedId === cv.id && (
+                        <div className="mt-3 border-t border-border pt-3">
+                          {cv.structured_data &&
+                          (cv.structured_data.skills.length > 0 ||
+                            cv.structured_data.experience.length > 0 ||
+                            cv.structured_data.education.length > 0 ||
+                            cv.structured_data.fullName ||
+                            cv.structured_data.email ||
+                            cv.structured_data.phone) ? (
+                            <div className="space-y-3">
+                              {(cv.structured_data.fullName ||
+                                cv.structured_data.email ||
+                                cv.structured_data.phone ||
+                                (cv.structured_data.links?.length ?? 0) > 0) && (
+                                <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                                  {cv.structured_data.fullName && (
+                                    <span className="font-medium text-foreground">
+                                      {cv.structured_data.fullName}
+                                    </span>
+                                  )}
+                                  {cv.structured_data.email && (
+                                    <span className="text-muted-foreground">
+                                      {cv.structured_data.email}
+                                    </span>
+                                  )}
+                                  {cv.structured_data.phone && (
+                                    <span className="text-muted-foreground">
+                                      {cv.structured_data.phone}
+                                    </span>
+                                  )}
+                                  {cv.structured_data.links?.map((link) => (
+                                    <a
+                                      key={link}
+                                      href={link}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="break-all text-accent hover:underline"
+                                    >
+                                      {link}
+                                    </a>
+                                  ))}
+                                </div>
+                              )}
+
+                              {cv.structured_data.skills.length > 0 && (
+                                <div>
+                                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Skills
+                                  </p>
+                                  <div className="flex flex-wrap gap-1">
+                                    {cv.structured_data.skills.map((skill) => (
+                                      <span
+                                        key={skill}
+                                        className="rounded-full bg-muted px-2 py-0.5 text-xs text-foreground"
+                                      >
+                                        {skill}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {cv.structured_data.experience.length > 0 && (
+                                <div>
+                                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Experience
+                                  </p>
+                                  <ul className="space-y-1.5">
+                                    {cv.structured_data.experience.map((entry, i) => (
+                                      <li key={i} className="text-sm">
+                                        <p className="break-words text-foreground">
+                                          {entry.text}
+                                        </p>
+                                        {entry.dateRange && (
+                                          <p className="text-xs text-muted-foreground">
+                                            {entry.dateRange}
+                                          </p>
+                                        )}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+
+                              {cv.structured_data.education.length > 0 && (
+                                <div>
+                                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Education
+                                  </p>
+                                  <ul className="space-y-1.5">
+                                    {cv.structured_data.education.map((entry, i) => (
+                                      <li key={i} className="text-sm">
+                                        <p className="break-words text-foreground">
+                                          {entry.text}
+                                        </p>
+                                        {entry.dateRange && (
+                                          <p className="text-xs text-muted-foreground">
+                                            {entry.dateRange}
+                                          </p>
+                                        )}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">
+                              No recognizable sections found — the raw text is
+                              still stored.
+                            </p>
                           )}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {cv.source === 'uploaded' ? 'Uploaded' : cv.source}
-                          {cv.text_length != null &&
-                            ` · ${cv.text_length.toLocaleString()} chars extracted`}
-                          {' · '}
-                          {new Date(cv.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => toggleDefaultMutation.mutate(cv)}
-                          aria-label={cv.is_default ? 'Unset default CV' : 'Set as default CV'}
-                          title={cv.is_default ? 'Unset default' : 'Set as default'}
-                          className={`rounded-lg p-2 transition-colors hover:bg-muted ${
-                            cv.is_default ? 'text-accent' : 'text-muted-foreground'
-                          }`}
-                        >
-                          <Star className="h-4 w-4" aria-hidden />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingId(cv.id);
-                            setEditLabel(cv.label);
-                          }}
-                          aria-label={`Rename ${cv.label}`}
-                          className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted"
-                        >
-                          <Pencil className="h-4 w-4" aria-hidden />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => downloadMutation.mutate(cv)}
-                          aria-label={`Download ${cv.label}`}
-                          className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted"
-                        >
-                          <Download className="h-4 w-4" aria-hidden />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => deleteMutation.mutate(cv.id)}
-                          aria-label={`Delete ${cv.label}`}
-                          className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-danger"
-                        >
-                          <Trash2 className="h-4 w-4" aria-hidden />
-                        </button>
-                      </div>
-                    </div>
+
+                          <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-border pt-3">
+                            <button
+                              type="button"
+                              onClick={() => parseMutation.mutate(cv)}
+                              disabled={parseMutation.isPending}
+                              className="inline-flex items-center gap-2 rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-white transition-colors hover:brightness-110 disabled:opacity-50"
+                            >
+                              <Sparkles className="h-4 w-4" aria-hidden />
+                              {parseMutation.isPending
+                                ? 'Parsing with AI...'
+                                : 'Try AI Parsing'}
+                            </button>
+                            {cv.parse_method === 'rule_based' && (
+                              <span className="text-xs text-muted-foreground">
+                                Didn&apos;t catch everything? AI parsing handles
+                                unusual formats better.
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
                 </li>
               ))}

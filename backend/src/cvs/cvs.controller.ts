@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Request,
   Res,
   UploadedFile,
@@ -57,6 +58,15 @@ export class CvsController {
   @Delete(':id')
   remove(@Request() req: { user: { id: string } }, @Param('id') id: string) {
     return this.cvsService.remove(req.user.id, id);
+  }
+
+  @Post(':id/parse')
+  parse(
+    @Request() req: { user: { id: string } },
+    @Param('id') id: string,
+    @Query('method') method: string,
+  ) {
+    return this.cvsService.parseCv(req.user.id, id, method);
   }
 
   @Get(':id/file')

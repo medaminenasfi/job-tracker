@@ -258,6 +258,11 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
       );
 
       ALTER TABLE jobs ADD COLUMN IF NOT EXISTS cv_id uuid REFERENCES cvs(id) ON DELETE SET NULL;
+
+      ALTER TABLE cvs ADD COLUMN IF NOT EXISTS structured_data jsonb;
+      ALTER TABLE cvs ADD COLUMN IF NOT EXISTS parse_method text;
+      ALTER TABLE cvs ADD COLUMN IF NOT EXISTS parse_status text NOT NULL DEFAULT 'pending';
+      ALTER TABLE cvs ADD COLUMN IF NOT EXISTS parsed_at timestamptz;
     `);
   }
 }
