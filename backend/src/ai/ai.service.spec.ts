@@ -49,9 +49,9 @@ describe('AiService', () => {
     jest.spyOn(global, 'fetch').mockImplementation(() => {
       calls++;
       if (calls === 1) {
-        return { ok: false, status: 429 } as Response;
+        return Promise.resolve({ ok: false, status: 429 } as Response);
       }
-      return {
+      return Promise.resolve({
         ok: true,
         status: 200,
         json: () =>
@@ -62,7 +62,7 @@ describe('AiService', () => {
               },
             ],
           }),
-      } as Response;
+      } as Response);
     });
     const result = await service.completeJson(
       [{ role: 'user', content: 'hi' }],
@@ -96,6 +96,70 @@ describe('AiService', () => {
     await expect(
       service.completeJson([{ role: 'user', content: 'hi' }], pingResultSchema),
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  // Regression: a timeout while streaming the response body used to escape as a
+  // raw DOMException and surface as an unhandled 500 ("socket hang up").
+  it('turns a timeout while reading the response body into a 504', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.reject(
+          Object.assign(new Error('The operation was aborted due to timeout'), {
+            name: 'TimeoutError',
+          }),
+        ),
+    } as Response);
+
+    await expect(
+      service.completeJson([{ role: 'user', content: 'hi' }], pingResultSchema),
+    ).rejects.toMatchObject({ status: HttpStatus.GATEWAY_TIMEOUT });
+  });
+
+  it('retries a timed-out request and succeeds', async () => {
+    let calls = 0;
+    jest.spyOn(global, 'fetch').mockImplementation(() => {
+      calls++;
+      if (calls === 1) {
+        return Promise.reject(
+          Object.assign(new Error('aborted'), { name: 'TimeoutError' }),
+        );
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            choices: [
+              {
+                message: { content: JSON.stringify({ ok: true, echo: 'hi' }) },
+              },
+            ],
+          }),
+      } as Response);
+    });
+
+    const result = await service.completeJson(
+      [{ role: 'user', content: 'hi' }],
+      pingResultSchema,
+    );
+    expect(result).toEqual({ ok: true, echo: 'hi' });
+    expect(calls).toBe(2);
+  });
+
+  it('gives up with 504 after repeated timeouts', async () => {
+    const fetchSpy = jest
+      .spyOn(global, 'fetch')
+      .mockImplementation(() =>
+        Promise.reject(
+          Object.assign(new Error('aborted'), { name: 'TimeoutError' }),
+        ),
+      );
+    await expect(
+      service.completeJson([{ role: 'user', content: 'hi' }], pingResultSchema),
+    ).rejects.toMatchObject({ status: HttpStatus.GATEWAY_TIMEOUT });
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
   });
 
   it('blocks when the monthly cap is reached', async () => {

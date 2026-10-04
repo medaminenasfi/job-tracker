@@ -9,6 +9,13 @@ import { z } from 'zod';
 import { DbService } from '../db/db.service';
 
 const CAP_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const MAX_ATTEMPTS = 3;
+
+const backoff = (attempt: number) =>
+  new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
+
+const describeError = (err: unknown) =>
+  err instanceof Error ? `${err.name}: ${err.message}` : String(err);
 
 @Injectable()
 export class AiService {
@@ -27,6 +34,12 @@ export class AiService {
   private get monthlyCap() {
     const cap = Number(process.env.AI_MONTHLY_CALL_CAP);
     return Number.isFinite(cap) && cap > 0 ? cap : 50;
+  }
+
+  // Free-tier models can be slow on a large CV, so the timeout is configurable.
+  private get timeoutMs() {
+    const value = Number(process.env.AI_TIMEOUT_MS);
+    return Number.isFinite(value) && value >= 5_000 ? value : 30_000;
   }
 
   async enforceMonthlyCap(userId: string) {
@@ -78,8 +91,8 @@ export class AiService {
       throw new ServiceUnavailableException('AI provider is not configured');
     }
     let res: Response;
-    // Free-tier models are rate-limited upstream: retry 429/5xx with
-    // backoff before giving up so a busy slot doesn't fail the match.
+    // Free-tier models are rate-limited and slow upstream: retry 429/5xx and
+    // transport timeouts with backoff before giving up.
     for (let attempt = 0; ; attempt++) {
       try {
         res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -94,20 +107,25 @@ export class AiService {
             messages,
             response_format: { type: 'json_object' },
           }),
-          signal: AbortSignal.timeout(30_000),
+          signal: AbortSignal.timeout(this.timeoutMs),
         });
       } catch (err) {
-        this.logger.warn(
-          `AI provider request failed: ${(err as Error).message}`,
-        );
-        throw new ServiceUnavailableException('AI request failed');
+        if (attempt < MAX_ATTEMPTS - 1) {
+          this.logger.warn(
+            `AI provider request error (${describeError(err)}), retrying (${attempt + 1}/${MAX_ATTEMPTS - 1})`,
+          );
+          await backoff(attempt);
+          continue;
+        }
+        this.logger.warn(`AI provider request failed: ${describeError(err)}`);
+        throw this.providerError(err);
       }
       const retryable = res.status === 429 || res.status >= 500;
-      if (!retryable || attempt >= 2) break;
+      if (!retryable || attempt >= MAX_ATTEMPTS - 1) break;
       this.logger.warn(
-        `AI provider ${res.status}, retrying (${attempt + 1}/2)`,
+        `AI provider ${res.status}, retrying (${attempt + 1}/${MAX_ATTEMPTS - 1})`,
       );
-      await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+      await backoff(attempt);
     }
     if (!res.ok) {
       this.logger.warn(`AI provider returned ${res.status}`);
@@ -121,9 +139,17 @@ export class AiService {
         `AI request failed (provider status ${res.status})`,
       );
     }
-    const body = (await res.json()) as {
-      choices?: { message?: { content?: string } }[];
-    };
+    // Reading the body is part of the same abort window: a slow stream aborts
+    // here too, so it must be handled exactly like a transport failure.
+    let body: { choices?: { message?: { content?: string } }[] };
+    try {
+      body = (await res.json()) as typeof body;
+    } catch (err) {
+      this.logger.warn(
+        `AI provider response unreadable: ${describeError(err)}`,
+      );
+      throw this.providerError(err);
+    }
     const content = body.choices?.[0]?.message?.content;
     let parsed: unknown;
     try {
@@ -136,5 +162,19 @@ export class AiService {
       throw new ServiceUnavailableException('AI returned unexpected shape');
     }
     return validated.data;
+  }
+
+  // A timeout/abort becomes an explicit 504 with actionable wording; anything
+  // else is an opaque transport failure. Raw DOMException/AbortError objects
+  // must never reach the exception layer.
+  private providerError(err: unknown) {
+    const name = err instanceof Error ? err.name : '';
+    if (name === 'TimeoutError' || name === 'AbortError') {
+      return new HttpException(
+        'AI provider timed out. Try again in a moment or use rule-based parsing.',
+        HttpStatus.GATEWAY_TIMEOUT,
+      );
+    }
+    return new ServiceUnavailableException('AI request failed');
   }
 }

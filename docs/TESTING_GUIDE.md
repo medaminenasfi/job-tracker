@@ -349,6 +349,107 @@ docker compose exec -T postgres psql -U postgres -d jobtracker \
 
 ---
 
+## 12. MVP3 — CV Builder & Parser (Phases 0–3)
+
+> Restart the backend after any DDL change (`docker compose restart backend`) —
+> `initSchema` only runs at boot, so new tables/columns appear then.
+
+### Phase 0 — Prerequisites
+
+```bash
+# AI module + monthly cap work: fill profile headline/skills, add a job with a
+# description → a match score appears (OpenRouter free tier; 429 is upstream).
+# Local file storage: any upload below creates backend/uploads/cvs/.
+# Docker on the host is only needed from Phase 4 (LaTeX sandbox).
+docker compose ps          # backend/front/postgres Up
+```
+
+### Phase 1 — CV upload & text extraction
+
+```bash
+# Upload a real PDF and a .docx (UI: /dashboard/profile/cvs)
+TOKEN=<user accessToken>
+curl -X POST http://localhost:3000/api/cvs -H "Authorization: Bearer $TOKEN" \
+  -F "file=@cv.pdf" -F "label=Full-Stack"      # 201, parse_status set
+curl http://localhost:3000/api/cvs -H "Authorization: Bearer $TOKEN"        # list
+curl http://localhost:3000/api/cvs/<id> -H "Authorization: Bearer $TOKEN"    # detail
+curl -X PATCH http://localhost:3000/api/cvs/<id> -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' -d '{"label":"Renamed","is_default":true}'
+curl -X DELETE http://localhost:3000/api/cvs/<id> -H "Authorization: Bearer $TOKEN"
+
+# Negative cases (each must be rejected, not silently accepted)
+curl -X POST http://localhost:3000/api/cvs -H "Authorization: Bearer $TOKEN" \
+  -F "file=@notes.txt;type=application/pdf"    # fake magic bytes → 400
+head -c 6MB /dev/urandom > big.pdf             # over CV_MAX_SIZE_MB → 400
+# Another user's CV id → 404; jobs.cv_id of another user's CV → 400/404
+```
+
+UI checks: rename, mark default (only one default per user), delete; CV dropdown
+in Add Job / Job Details lists only your own CVs.
+
+### Phase 2 — Parsing (rule-based + AI)
+
+```bash
+# Rule-based (free, synchronous, runs on upload): re-run explicitly with
+curl -X POST "http://localhost:3000/api/cvs/<id>/parse?method=rule" \
+  -H "Authorization: Bearer $TOKEN"            # parse_method=rule_based
+# AI (explicit, costs a call, counts against AI_MONTHLY_CALL_CAP):
+curl -X POST "http://localhost:3000/api/cvs/<id>/parse?method=ai" \
+  -H "Authorization: Bearer $TOKEN"            # parse_method=ai
+curl -X POST "http://localhost:3000/api/cvs/<id>/parse?method=nope" \
+  -H "Authorization: Bearer $TOKEN"            # 400 method must be rule|ai
+```
+
+- Clean single-page CV with standard headers → `parse_status=parsed`, zero AI calls.
+- CV with no recognizable headers → `failed` (plain-text fallback), never garbage.
+- Multi-column/creative CV → `partial` → **Try AI Parsing** button appears.
+- Free tier is slow/rate-limited: a timeout returns **504** "AI provider timed
+  out…" and is retried twice internally (1s/2s backoff). Raise `AI_TIMEOUT_MS`
+  for long CVs. Exhausting `AI_MONTHLY_CALL_CAP` → 429.
+
+### Phase 3 — Admin LaTeX templates
+
+```bash
+ADMIN=<admin accessToken>
+# Placeholder catalogue (allowed set, documented for admins)
+curl http://localhost:3000/api/admin/cv-templates/placeholders -H "Authorization: Bearer $ADMIN"
+curl "http://localhost:3000/api/admin/cv-templates?include_inactive=true" -H "Authorization: Bearer $ADMIN"
+
+curl -X POST http://localhost:3000/api/admin/cv-templates -H "Authorization: Bearer $ADMIN" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Classic","latex_source":"{{fullName}}\n{{email}}","language":"en"}'
+
+curl -X POST http://localhost:3000/api/admin/cv-templates/preview -H "Authorization: Bearer $ADMIN" \
+  -H 'Content-Type: application/json' \
+  -d '{"latex_source":"Name: {{fullName}} \\ Company: {{headline}}"}'   # merged, escaped .tex
+
+curl -X PATCH http://localhost:3000/api/admin/cv-templates/<id> -H "Authorization: Bearer $ADMIN" \
+  -H 'Content-Type: application/json' -d '{"is_active":false}'
+curl -X DELETE http://localhost:3000/api/admin/cv-templates/<id> -H "Authorization: Bearer $ADMIN"
+```
+
+Rejections (all must be 400, nothing saved):
+
+```bash
+# Unknown placeholder → "Unknown placeholder …"
+-d '{"name":"X","latex_source":"{{user_email}}"}'
+# Dangerous LaTeX primitive → "forbidden LaTeX primitive \input"
+-d '{"name":"X","latex_source":"\\input{/etc/passwd}"}'
+-d '{"name":"X","latex_source":"\\immediate\\write18{rm -rf /}"}'
+-d '{"name":"X","latex_source":"\\usepackage{shellesc}"}'
+# Unbalanced token / empty / oversized source / bad language
+-d '{"name":"X","latex_source":"{{fullName"}'
+-d '{"name":"X","latex_source":""}'
+-d '{"name":"X","latex_source":"{{fullName}}","language":"de"}'
+```
+
+UI checks (`/admin/login` → **CV Templates**): list, New template, `.tex` upload,
+placeholder chips, Preview with sample data, Edit, Activate/Deactivate, confirm
+Delete. Authorization: normal user → 403 on every `/api/admin/cv-templates*`
+call and `/admin/cv-templates` redirects to `/admin/login`.
+
+---
+
 ## Quick smoke path (5 minutes)
 
 1. `docker compose up -d` → `curl http://localhost:3000/api` = 200.
@@ -357,4 +458,6 @@ docker compose exec -T postgres psql -U postgres -d jobtracker \
 4. `/dashboard/jobs` → create + edit + delete a job.
 5. `curl` login without `turnstileToken` → 400 (CAPTCHA enforced).
 6. Seed admin → `/admin/login` → open `users` + `audit-logs`.
-7. Cleanup test users.
+7. `/dashboard/profile/cvs` → upload a PDF → rule-based parse badge appears.
+8. Admin → `/admin/cv-templates` → create + preview + delete a template.
+9. Cleanup test users.
