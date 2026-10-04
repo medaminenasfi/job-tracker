@@ -149,6 +149,25 @@ export interface Paginated<T> {
   limit: number;
 }
 
+// ---- Admin CV templates (MVP3 Phase 3) ----
+// Admin-authored LaTeX; the list omits latex_source (fetched on edit).
+
+export type TemplateLanguage = 'en' | 'fr';
+
+export interface AdminCvTemplate {
+  id: string;
+  name: string;
+  description?: string | null;
+  preview_image_url?: string | null;
+  latex_source?: string;
+  language: TemplateLanguage;
+  is_active: boolean;
+  created_by?: string | null;
+  created_by_email?: string | null;
+  created_at: string;
+  latex_length?: number | null;
+}
+
 // ---- User dashboard home (Phase 8) ----
 
 export interface Announcement {

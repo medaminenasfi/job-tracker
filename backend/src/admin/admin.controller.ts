@@ -101,4 +101,51 @@ export class AdminController {
   listAuditLogs(@Query() query: unknown) {
     return this.adminService.listAuditLogs(query);
   }
+
+  // CV templates are written by admins only — no user-facing endpoint ever
+  // accepts latex_source.
+  @Get('cv-templates/placeholders')
+  getCvTemplatePlaceholders() {
+    return this.adminService.getCvTemplatePlaceholders();
+  }
+
+  @Get('cv-templates')
+  listCvTemplates(@Query() query: unknown) {
+    return this.adminService.listCvTemplates(query);
+  }
+
+  @Get('cv-templates/:id')
+  getCvTemplate(@Param('id') id: string) {
+    return this.adminService.getCvTemplate(id);
+  }
+
+  @Post('cv-templates')
+  createCvTemplate(
+    @Request() req: { user: { id: string } },
+    @Body() body: unknown,
+  ) {
+    return this.adminService.createCvTemplate(this.adminId(req), body);
+  }
+
+  @Patch('cv-templates/:id')
+  updateCvTemplate(
+    @Request() req: { user: { id: string } },
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    return this.adminService.updateCvTemplate(this.adminId(req), id, body);
+  }
+
+  @Delete('cv-templates/:id')
+  deleteCvTemplate(
+    @Request() req: { user: { id: string } },
+    @Param('id') id: string,
+  ) {
+    return this.adminService.deleteCvTemplate(this.adminId(req), id);
+  }
+
+  @Post('cv-templates/preview')
+  previewCvTemplate(@Body() body: unknown) {
+    return this.adminService.previewCvTemplate(body);
+  }
 }

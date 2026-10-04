@@ -27,6 +27,11 @@ describe('AdminService', () => {
       | 'writeAuditLog'
       | 'consumeInvite'
       | 'createInvite'
+      | 'listCvTemplates'
+      | 'getCvTemplate'
+      | 'createCvTemplate'
+      | 'updateCvTemplate'
+      | 'deleteCvTemplate'
     >
   >;
   let auth: jest.Mocked<
@@ -51,6 +56,11 @@ describe('AdminService', () => {
       writeAuditLog: jest.fn().mockResolvedValue(undefined),
       consumeInvite: jest.fn(),
       createInvite: jest.fn(),
+      listCvTemplates: jest.fn().mockResolvedValue([]),
+      getCvTemplate: jest.fn(),
+      createCvTemplate: jest.fn(),
+      updateCvTemplate: jest.fn(),
+      deleteCvTemplate: jest.fn().mockResolvedValue(undefined),
     };
     auth = {
       verifyCredentials: jest.fn(),
@@ -385,6 +395,145 @@ describe('AdminService', () => {
         }),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(auth.createUser).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('CV templates', () => {
+    it('creates a template, audits it and returns the stored row', async () => {
+      repo.createCvTemplate.mockResolvedValue({ id: 't1', name: 'Classic' });
+      const result = await service.createCvTemplate('a1', {
+        name: 'Classic',
+        latex_source: '{{fullName}}',
+      });
+      expect(repo.createCvTemplate).toHaveBeenCalledWith(
+        {
+          name: 'Classic',
+          latex_source: '{{fullName}}',
+          language: 'en',
+          is_active: true,
+        },
+        'a1',
+      );
+      expect(repo.writeAuditLog).toHaveBeenCalledWith(
+        'a1',
+        'CV_TEMPLATE_CREATED',
+        'cv_template',
+        't1',
+      );
+      expect(result).toEqual({ id: 't1', name: 'Classic' });
+    });
+
+    it('rejects a template with an unknown placeholder', async () => {
+      await expect(
+        service.createCvTemplate('a1', {
+          name: 'Bad',
+          latex_source: '{{user_email}}',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(repo.createCvTemplate).not.toHaveBeenCalled();
+    });
+
+    it('rejects a template embedding a dangerous LaTeX primitive', async () => {
+      await expect(
+        service.createCvTemplate('a1', {
+          name: 'Bad',
+          latex_source: '\\input{/etc/passwd}',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(repo.createCvTemplate).not.toHaveBeenCalled();
+    });
+
+    it('rejects an empty patch', async () => {
+      await expect(
+        service.updateCvTemplate('a1', 't1', {}),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(repo.updateCvTemplate).not.toHaveBeenCalled();
+    });
+
+    it('updates a template without re-validating latex when only the name changes', async () => {
+      repo.getCvTemplate.mockResolvedValue({ id: 't1' });
+      repo.updateCvTemplate.mockResolvedValue({ id: 't1', name: 'Renamed' });
+      const result = await service.updateCvTemplate('a1', 't1', {
+        name: 'Renamed',
+      });
+      expect(repo.updateCvTemplate).toHaveBeenCalledWith('t1', {
+        name: 'Renamed',
+      });
+      expect(repo.writeAuditLog).toHaveBeenCalledWith(
+        'a1',
+        'CV_TEMPLATE_UPDATED',
+        'cv_template',
+        't1',
+      );
+      expect(result).toEqual({ id: 't1', name: 'Renamed' });
+    });
+
+    it('validates latex on update and 404s for an unknown template', async () => {
+      repo.getCvTemplate.mockResolvedValue(null);
+      await expect(
+        service.updateCvTemplate('a1', 'missing', {
+          latex_source: '\\write18{id}',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(repo.updateCvTemplate).not.toHaveBeenCalled();
+
+      await expect(
+        service.updateCvTemplate('a1', 'missing', { is_active: false }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(repo.updateCvTemplate).not.toHaveBeenCalled();
+    });
+
+    it('lists templates including inactive ones when asked', async () => {
+      await service.listCvTemplates({ include_inactive: 'true' });
+      expect(repo.listCvTemplates).toHaveBeenCalledWith(true);
+      await service.listCvTemplates({});
+      expect(repo.listCvTemplates).toHaveBeenCalledWith(false);
+    });
+
+    it('previews a template with sample data and escaped values', () => {
+      const result = service.previewCvTemplate({
+        latex_source: 'Name: {{fullName}}\\ Contact: {{email}}',
+      });
+      expect(result.placeholders).toEqual(['fullName', 'email']);
+      expect(result.latex).not.toContain('{{');
+      expect(result.latex).toContain('Ada Lovelace');
+    });
+
+    it('rejects an invalid preview payload', () => {
+      expect(() => service.previewCvTemplate({})).toThrow(BadRequestException);
+      expect(() =>
+        service.previewCvTemplate({ latex_source: '{{nope}}' }),
+      ).toThrow(BadRequestException);
+    });
+
+    it('404s when getting or deleting an unknown template', async () => {
+      repo.getCvTemplate.mockResolvedValue(null);
+      await expect(service.getCvTemplate('nope')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      await expect(
+        service.deleteCvTemplate('a1', 'nope'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(repo.deleteCvTemplate).not.toHaveBeenCalled();
+    });
+
+    it('deletes an existing template and audits it', async () => {
+      repo.getCvTemplate.mockResolvedValue({ id: 't1' });
+      const result = await service.deleteCvTemplate('a1', 't1');
+      expect(repo.deleteCvTemplate).toHaveBeenCalledWith('t1');
+      expect(repo.writeAuditLog).toHaveBeenCalledWith(
+        'a1',
+        'CV_TEMPLATE_DELETED',
+        'cv_template',
+        't1',
+      );
+      expect(result).toEqual({ deleted: true });
+    });
+
+    it('exposes the documented placeholder set', () => {
+      const { placeholders } = service.getCvTemplatePlaceholders();
+      expect(placeholders.map((p) => p.token)).toContain('{{fullName}}');
+      expect(placeholders).toHaveLength(8);
     });
   });
 });

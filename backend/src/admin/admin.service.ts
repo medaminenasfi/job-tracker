@@ -6,6 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { z } from 'zod';
 import { AdminRepository } from './admin.repository';
 import { AuthService } from '../auth/auth.service';
 import { ADMIN_COOKIE } from '../auth/auth.cookies';
@@ -19,9 +20,33 @@ import {
   adminUsersQuerySchema,
   adminJobsQuerySchema,
   paginationSchema,
+  booleanQuerySchema,
+  createCvTemplateSchema,
+  updateCvTemplateSchema,
+  cvTemplatePreviewSchema,
 } from './admin.schemas';
+import {
+  CV_TEMPLATE_PLACEHOLDERS,
+  LatexTemplateError,
+  mergeTemplate,
+  validateTemplateSource,
+} from './cv-templates-latex';
 
 const DEFAULT_INVITE_TTL_DAYS = 7;
+
+// Sample data for the admin Preview action. Values deliberately include LaTeX
+// special characters so the preview also demonstrates the escaping.
+const CV_TEMPLATE_SAMPLE_DATA = {
+  fullName: 'Ada Lovelace',
+  headline: 'Senior Full-Stack Engineer',
+  email: 'ada.lovelace@example.com',
+  phone: '+33 6 12 34 56 78',
+  links: 'linkedin.com/in/adalovelace — github.com/adalovelace',
+  experience:
+    'Senior Engineer, Analytical Engines Ltd (2021 – Present)\\nShipped a R&D platform used by 40+ teams.',
+  education: 'MSc Mathematics, University of London (2015 – 2018)',
+  skills: 'TypeScript, React, Node.js, PostgreSQL, Docker',
+} as const;
 
 @Injectable()
 export class AdminService {
@@ -234,5 +259,117 @@ export class AdminService {
       );
     }
     return this.adminRepo.listAuditLogs(parsed.data.page, parsed.data.limit);
+  }
+
+  // ---- CV templates (MVP3 Phase 3) ----
+
+  // Placeholder catalogue so the admin UI can document exactly what a template
+  // may embed.
+  getCvTemplatePlaceholders() {
+    return {
+      placeholders: CV_TEMPLATE_PLACEHOLDERS.map((name) => ({
+        name,
+        token: `{{${name}}}`,
+      })),
+    };
+  }
+
+  async listCvTemplates(query: unknown) {
+    const parsed = z
+      .object({ include_inactive: booleanQuerySchema })
+      .safeParse(query ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException(
+        parsed.error.issues[0]?.message ?? 'Invalid query',
+      );
+    }
+    return this.adminRepo.listCvTemplates(parsed.data.include_inactive);
+  }
+
+  async getCvTemplate(id: string) {
+    const template = await this.adminRepo.getCvTemplate(id);
+    if (!template) throw new NotFoundException('Template not found');
+    return template;
+  }
+
+  async createCvTemplate(adminId: string, data: unknown) {
+    const parsed = createCvTemplateSchema.safeParse(data ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException(
+        parsed.error.issues[0]?.message ?? 'Invalid input',
+      );
+    }
+    this.assertValidLatex(parsed.data.latex_source);
+    const created = await this.adminRepo.createCvTemplate(parsed.data, adminId);
+    await this.adminRepo.writeAuditLog(
+      adminId,
+      'CV_TEMPLATE_CREATED',
+      'cv_template',
+      created.id,
+    );
+    return created;
+  }
+
+  async updateCvTemplate(adminId: string, id: string, data: unknown) {
+    const parsed = updateCvTemplateSchema.safeParse(data ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException(
+        parsed.error.issues[0]?.message ?? 'Invalid input',
+      );
+    }
+    if (parsed.data.latex_source !== undefined) {
+      this.assertValidLatex(parsed.data.latex_source);
+    }
+    const existing = await this.adminRepo.getCvTemplate(id);
+    if (!existing) throw new NotFoundException('Template not found');
+    const updated = await this.adminRepo.updateCvTemplate(id, parsed.data);
+    await this.adminRepo.writeAuditLog(
+      adminId,
+      'CV_TEMPLATE_UPDATED',
+      'cv_template',
+      id,
+    );
+    return updated;
+  }
+
+  async deleteCvTemplate(adminId: string, id: string) {
+    const existing = await this.adminRepo.getCvTemplate(id);
+    if (!existing) throw new NotFoundException('Template not found');
+    await this.adminRepo.deleteCvTemplate(id);
+    await this.adminRepo.writeAuditLog(
+      adminId,
+      'CV_TEMPLATE_DELETED',
+      'cv_template',
+      id,
+    );
+    return { deleted: true };
+  }
+
+  // Renders the template with sample data through the real merge pipeline, so an
+  // admin can confirm placeholders land correctly before activating. Phase 4
+  // compiles this output to PDF inside the sandbox.
+  previewCvTemplate(data: unknown) {
+    const parsed = cvTemplatePreviewSchema.safeParse(data ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException(
+        parsed.error.issues[0]?.message ?? 'Invalid input',
+      );
+    }
+    const placeholders = this.assertValidLatex(parsed.data.latex_source);
+    return {
+      placeholders,
+      latex: mergeTemplate(parsed.data.latex_source, CV_TEMPLATE_SAMPLE_DATA),
+    };
+  }
+
+  private assertValidLatex(source: string): string[] {
+    try {
+      return validateTemplateSource(source);
+    } catch (error) {
+      if (error instanceof LatexTemplateError) {
+        throw new BadRequestException(error.message);
+      }
+      throw error;
+    }
   }
 }

@@ -2,7 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { DbService } from '../db/db.service';
 import { hashToken } from '../auth/token-hash';
-import type { AdminUsersQuery, AdminJobsQuery } from './admin.schemas';
+import type {
+  AdminUsersQuery,
+  AdminJobsQuery,
+  CreateCvTemplateInput,
+  UpdateCvTemplateInput,
+} from './admin.schemas';
 
 // NOTE: this is the ONE repository allowed to run cross-user queries. Every
 // method here is reachable only through the ADMIN-guarded controller. The normal
@@ -237,5 +242,86 @@ export class AdminRepository {
       [limit, offset],
     );
     return { data: result.rows, total: countRes.rows[0].count, page, limit };
+  }
+
+  // ---- CV templates (MVP3 Phase 3) ----
+
+  // The list omits latex_source: the admin list only needs metadata, and the
+  // source is fetched on edit via getCvTemplate.
+  async listCvTemplates(includeInactive: boolean) {
+    const result = await this.db.query(
+      `SELECT t.id, t.name, t.description, t.preview_image_url, t.language,
+              t.is_active, t.created_by, t.created_at,
+              length(t.latex_source) AS latex_length, u.email AS created_by_email
+       FROM cv_templates t LEFT JOIN users u ON u.id = t.created_by
+       ${includeInactive ? '' : 'WHERE t.is_active = true'}
+       ORDER BY t.created_at DESC`,
+    );
+    return result.rows;
+  }
+
+  async getCvTemplate(id: string) {
+    const result = await this.db.query(
+      `SELECT id, name, description, preview_image_url, latex_source, language,
+              is_active, created_by, created_at
+       FROM cv_templates WHERE id = $1`,
+      [id],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async createCvTemplate(input: CreateCvTemplateInput, createdBy: string) {
+    const result = await this.db.query(
+      `INSERT INTO cv_templates
+         (name, description, preview_image_url, latex_source, language, is_active, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id`,
+      [
+        input.name,
+        input.description ?? null,
+        input.preview_image_url ?? null,
+        input.latex_source,
+        input.language,
+        input.is_active,
+        createdBy,
+      ],
+    );
+    const id = result.rows[0].id as string;
+    return this.getCvTemplate(id);
+  }
+
+  async updateCvTemplate(id: string, patch: UpdateCvTemplateInput) {
+    // Whitelisted column map: the SET list is built from constant keys only, so
+    // no user-controlled string ever reaches the SQL text.
+    const columns: Record<keyof UpdateCvTemplateInput, string> = {
+      name: 'name',
+      description: 'description',
+      preview_image_url: 'preview_image_url',
+      latex_source: 'latex_source',
+      language: 'language',
+      is_active: 'is_active',
+    };
+    const sets: string[] = [];
+    const values: unknown[] = [];
+    let idx = 1;
+    for (const [key, column] of Object.entries(columns)) {
+      const value = patch[key as keyof UpdateCvTemplateInput];
+      if (value === undefined) continue;
+      sets.push(`${column} = $${idx}`);
+      values.push(value);
+      idx++;
+    }
+    if (sets.length > 0) {
+      values.push(id);
+      await this.db.query(
+        `UPDATE cv_templates SET ${sets.join(', ')} WHERE id = $${idx}`,
+        values,
+      );
+    }
+    return this.getCvTemplate(id);
+  }
+
+  async deleteCvTemplate(id: string) {
+    await this.db.query('DELETE FROM cv_templates WHERE id = $1', [id]);
   }
 }

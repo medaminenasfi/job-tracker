@@ -264,5 +264,24 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
       ALTER TABLE cvs ADD COLUMN IF NOT EXISTS parse_status text NOT NULL DEFAULT 'pending';
       ALTER TABLE cvs ADD COLUMN IF NOT EXISTS parsed_at timestamptz;
     `);
+
+    // MVP3 Phase 3 — admin-authored LaTeX templates. latex_source is only ever
+    // written through ADMIN-guarded endpoints; `language` is reserved for
+    // MVP7's localisation of the template gallery.
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS cv_templates (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        name text NOT NULL,
+        description text,
+        preview_image_url text,
+        latex_source text NOT NULL,
+        language text NOT NULL DEFAULT 'en',
+        is_active boolean NOT NULL DEFAULT true,
+        created_by uuid REFERENCES users(id) ON DELETE SET NULL,
+        created_at timestamptz DEFAULT now()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_cv_templates_is_active ON cv_templates(is_active);
+    `);
   }
 }

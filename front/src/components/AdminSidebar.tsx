@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import {
   ArrowLeft,
   Briefcase,
+  FileText,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -20,6 +21,7 @@ const navItems = [
   { href: '/admin', label: 'Overview', icon: LayoutDashboard },
   { href: '/admin/users', label: 'Users', icon: Users },
   { href: '/admin/jobs', label: 'Jobs', icon: Briefcase },
+  { href: '/admin/cv-templates', label: 'CV Templates', icon: FileText },
   { href: '/admin/audit-logs', label: 'Audit Log', icon: ShieldCheck },
 ];
 
