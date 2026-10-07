@@ -15,6 +15,10 @@ RUN npm run build
 FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+# poppler-utils provides pdftotext, used to extract text from uploaded PDFs with
+# the inter-word spacing intact (see src/cvs/pdf-text.ts). Without it the
+# extractor degrades to pdf-parse, which glues words together.
+RUN apk add --no-cache poppler-utils
 # Prod deps only. If bcrypt ever fails to fetch a musl prebuild on a new Node
 # minor, add build tools for this step:
 #   RUN apk add --no-cache python3 make g++

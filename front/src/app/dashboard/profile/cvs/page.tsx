@@ -1,9 +1,10 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, ChevronDown, Download, Pencil, Plus, Star, Trash2, X, Sparkles } from 'lucide-react';
-import { apiFetch, apiJson, extractMessage } from '@/lib/api';
+import { Check, ChevronDown, Download, Pencil, Plus, Star, Trash2, Wand2, X, Sparkles } from 'lucide-react';
+import { apiFetch, apiJson, downloadApiFile, extractMessage } from '@/lib/api';
 import { SectionLoader } from '@/components/ui/Loading';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -99,21 +100,21 @@ export default function CvsPage() {
     onError: (e: Error) => flash('error', e.message),
   });
 
-  const downloadMutation = useMutation({
-    mutationFn: async (cv: Cv) => {
-      const res = await apiFetch(`/api/cvs/${cv.id}/file`);
-      if (!res.ok) throw new Error('Download failed');
-      const blob = await res.blob();
-      // The endpoint sets Content-Disposition with the real filename.
-      const disposition = res.headers.get('content-disposition') ?? '';
-      const match = /filename="([^"]+)"/.exec(disposition);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = match?.[1] ?? `cv-${cv.id}`;
-      a.click();
-      URL.revokeObjectURL(url);
+  // Rule-based re-parse is free and re-extracts the text from the stored file,
+  // so it is the way to repair a row parsed by an older extractor — not AI.
+  const reparseMutation = useMutation({
+    mutationFn: (cv: Cv) =>
+      apiJson(`/api/cvs/${cv.id}/parse?method=rule`, { method: 'POST' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cvs'] });
+      flash('success', 'Re-parsed.');
     },
+    onError: (e: Error) => flash('error', e.message),
+  });
+
+  const downloadMutation = useMutation({
+    mutationFn: (cv: Cv) =>
+      downloadApiFile(`/api/cvs/${cv.id}/file`, `cv-${cv.id}`),
     onError: (e: Error) => flash('error', e.message),
   });
 
@@ -136,6 +137,12 @@ export default function CvsPage() {
       <PageHeader
         title="My CVs"
         subtitle="Upload a PDF or DOCX — it's stored with its extracted text and can be attached to applications"
+        actions={
+          <Link href="/cv-builder" className="inline-flex items-center gap-1.5 text-sm font-semibold text-accent hover:underline">
+            <Wand2 className="h-4 w-4" aria-hidden />
+            Build a CV
+          </Link>
+        }
       />
 
       {message && (
@@ -153,7 +160,10 @@ export default function CvsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 px-4 py-5 sm:px-6">
-          <Field label="Label">
+          <Field
+            label="Label (optional)"
+            hint="Leave it empty and we'll name it after the name and headline found in the file."
+          >
             {(id) => (
               <Input
                 id={id}
@@ -183,10 +193,15 @@ export default function CvsPage() {
             type="button"
             onClick={() => uploadMutation.mutate()}
             loading={uploadMutation.isPending}
-            disabled={!file || !label.trim()}
+            disabled={!file}
           >
             {uploadMutation.isPending ? 'Uploading...' : 'Upload CV'}
           </Button>
+          {!file && (
+            <p className="text-xs text-muted-foreground">
+              Choose a PDF or DOCX file to upload.
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -257,35 +272,43 @@ export default function CvsPage() {
                             )}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            {cv.source === 'uploaded' ? 'Uploaded' : cv.source}
+                            {cv.source === 'built' ? 'Generated' : 'Uploaded'}
                             {cv.text_length != null &&
                               ` · ${cv.text_length.toLocaleString()} chars extracted`}
                             {' · '}
                             {new Date(cv.created_at).toLocaleDateString()}
                           </p>
                           <p className="mt-1 flex flex-wrap items-center gap-1.5">
-                            <span
-                              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                                cv.parse_status === 'parsed'
-                                  ? 'bg-success/15 text-success'
-                                  : cv.parse_status === 'partial'
-                                    ? 'bg-warning/15 text-warning'
-                                    : cv.parse_status === 'failed'
-                                      ? 'bg-danger/15 text-danger'
-                                      : 'bg-muted text-muted-foreground'
-                              }`}
-                            >
-                              {cv.parse_status === 'parsed'
-                                ? 'Parsed'
-                                : cv.parse_status === 'partial'
-                                  ? 'Partial'
-                                  : cv.parse_status === 'failed'
-                                    ? 'Failed'
-                                    : 'Pending'}
-                            </span>
-                            <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                              {cv.parse_method === 'ai' ? 'AI parsing' : 'Rule-based'}
-                            </span>
+                            {cv.source === 'built' ? (
+                              <span className="rounded-full bg-accent/15 px-2 py-0.5 text-xs font-medium text-accent">
+                                Built from template
+                              </span>
+                            ) : (
+                              <>
+                                <span
+                                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                                    cv.parse_status === 'parsed'
+                                      ? 'bg-success/15 text-success'
+                                      : cv.parse_status === 'partial'
+                                        ? 'bg-warning/15 text-warning'
+                                        : cv.parse_status === 'failed'
+                                          ? 'bg-danger/15 text-danger'
+                                          : 'bg-muted text-muted-foreground'
+                                  }`}
+                                >
+                                  {cv.parse_status === 'parsed'
+                                    ? 'Parsed'
+                                    : cv.parse_status === 'partial'
+                                      ? 'Partial'
+                                      : cv.parse_status === 'failed'
+                                        ? 'Failed'
+                                        : 'Pending'}
+                                </span>
+                                <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                                  {cv.parse_method === 'ai' ? 'AI parsing' : 'Rule-based'}
+                                </span>
+                              </>
+                            )}
                           </p>
                         </div>
                         <div className="flex items-center gap-1">
@@ -464,22 +487,44 @@ export default function CvsPage() {
                           )}
 
                           <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-border pt-3">
-                            <button
-                              type="button"
-                              onClick={() => parseMutation.mutate(cv)}
-                              disabled={parseMutation.isPending}
-                              className="inline-flex items-center gap-2 rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-white transition-colors hover:brightness-110 disabled:opacity-50"
-                            >
-                              <Sparkles className="h-4 w-4" aria-hidden />
-                              {parseMutation.isPending
-                                ? 'Parsing with AI...'
-                                : 'Try AI Parsing'}
-                            </button>
-                            {cv.parse_method === 'rule_based' && (
+                            {cv.source === 'built' ? (
                               <span className="text-xs text-muted-foreground">
-                                Didn&apos;t catch everything? AI parsing handles
-                                unusual formats better.
+                                Generated from a template — edit it in the CV
+                                Builder to change the content.
                               </span>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => reparseMutation.mutate(cv)}
+                                  disabled={
+                                    reparseMutation.isPending ||
+                                    parseMutation.isPending
+                                  }
+                                  className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                                >
+                                  {reparseMutation.isPending
+                                    ? 'Re-parsing...'
+                                    : 'Re-parse'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => parseMutation.mutate(cv)}
+                                  disabled={parseMutation.isPending}
+                                  className="inline-flex items-center gap-2 rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-white transition-colors hover:brightness-110 disabled:opacity-50"
+                                >
+                                  <Sparkles className="h-4 w-4" aria-hidden />
+                                  {parseMutation.isPending
+                                    ? 'Parsing with AI...'
+                                    : 'Try AI Parsing'}
+                                </button>
+                                {cv.parse_method === 'rule_based' && (
+                                  <span className="text-xs text-muted-foreground">
+                                    Didn&apos;t catch everything? AI parsing handles
+                                    unusual formats better.
+                                  </span>
+                                )}
+                              </>
                             )}
                           </div>
                         </div>

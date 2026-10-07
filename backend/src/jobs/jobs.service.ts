@@ -118,7 +118,7 @@ export class JobsService {
     }
     const jobRes = await this.db.query(
       `SELECT id, title, company, description, updated_at, match_score, match_skills_matched,
-              match_skills_missing, match_computed_at
+              match_skills_missing, match_computed_at, cv_id
          FROM jobs WHERE id = $1 AND user_id = $2`,
       [jobId, userId],
     );
@@ -133,6 +133,7 @@ export class JobsService {
           match_skills_matched: string[] | null;
           match_skills_missing: string[] | null;
           match_computed_at: string | null;
+          cv_id: string | null;
         }
       | undefined;
     if (!job) throw new NotFoundException('Job not found');
@@ -156,16 +157,39 @@ export class JobsService {
       );
     }
 
+    // If the job has a linked CV, fetch its structured data to enrich the match.
+    let cvStructuredData: {
+      fullName?: string | null;
+      headline?: string | null;
+      email?: string | null;
+      phone?: string | null;
+      links?: string[];
+      experience?: { text: string; dateRange?: string }[];
+      education?: { text: string; dateRange?: string }[];
+      skills?: string[];
+    } | null = null;
+    if (job.cv_id) {
+      const cvRes = await this.db.query(
+        `SELECT structured_data FROM cvs WHERE id = $1 AND user_id = $2`,
+        [job.cv_id, userId],
+      );
+      if (cvRes.rows[0]?.structured_data) {
+        cvStructuredData = cvRes.rows[0].structured_data as typeof cvStructuredData;
+      }
+    }
+
     // Cache: nothing relevant changed since the last successful computation.
     const computedAt = job.match_computed_at
       ? new Date(job.match_computed_at).getTime()
       : 0;
+    const cvUpdatedAt = cvStructuredData ? Date.now() : 0; // CV doesn't have updated_at in query; treat as always fresh if present
     const stale =
       !computedAt ||
       new Date(job.updated_at).getTime() > computedAt ||
       (profile.updated_at
         ? new Date(profile.updated_at).getTime() > computedAt
-        : false);
+        : false) ||
+      (cvStructuredData && cvUpdatedAt > computedAt);
     if (!stale && job.match_score != null) {
       return {
         score: job.match_score,
@@ -183,6 +207,7 @@ export class JobsService {
         yearsExperience: profile.years_experience,
         skills: profile.skills,
       },
+      cvStructuredData,
     );
     await this.db.query(
       `UPDATE jobs SET match_score = $1, match_skills_matched = $2, match_skills_missing = $3,

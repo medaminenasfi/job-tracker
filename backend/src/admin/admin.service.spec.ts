@@ -6,12 +6,18 @@ import {
   BadRequestException,
   ForbiddenException,
   NotFoundException,
+  ServiceUnavailableException,
   UnauthorizedException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { AdminRepository } from './admin.repository';
 import { AuthService } from '../auth/auth.service';
 import { ADMIN_COOKIE } from '../auth/auth.cookies';
+import {
+  LatexPreviewService,
+  PreviewSupersededException,
+} from '../latex/latex-preview.service';
 
 describe('AdminService', () => {
   let repo: jest.Mocked<
@@ -32,6 +38,7 @@ describe('AdminService', () => {
       | 'createCvTemplate'
       | 'updateCvTemplate'
       | 'deleteCvTemplate'
+      | 'countGeneratedCvsForTemplate'
     >
   >;
   let auth: jest.Mocked<
@@ -40,6 +47,7 @@ describe('AdminService', () => {
       'verifyCredentials' | 'createUser' | 'issueSession' | 'refresh' | 'logout'
     >
   >;
+  let previews: jest.Mocked<Pick<LatexPreviewService, 'renderAdminPreview'>>;
   let service: AdminService;
 
   beforeEach(() => {
@@ -61,6 +69,7 @@ describe('AdminService', () => {
       createCvTemplate: jest.fn(),
       updateCvTemplate: jest.fn(),
       deleteCvTemplate: jest.fn().mockResolvedValue(undefined),
+    countGeneratedCvsForTemplate: jest.fn().mockResolvedValue(0),
     };
     auth = {
       verifyCredentials: jest.fn(),
@@ -69,9 +78,15 @@ describe('AdminService', () => {
       refresh: jest.fn().mockResolvedValue({ accessToken: 'refreshed' }),
       logout: jest.fn().mockResolvedValue({ message: 'Logged out' }),
     };
+    previews = {
+      renderAdminPreview: jest
+        .fn()
+        .mockResolvedValue({ png: Buffer.from('png-bytes'), cached: false }),
+    };
     service = new AdminService(
       repo as unknown as AdminRepository,
       auth as unknown as AuthService,
+      previews as unknown as LatexPreviewService,
     );
   });
 
@@ -490,20 +505,86 @@ describe('AdminService', () => {
       expect(repo.listCvTemplates).toHaveBeenCalledWith(false);
     });
 
-    it('previews a template with sample data and escaped values', () => {
-      const result = service.previewCvTemplate({
+    it('previews a template with sample data, escaped values and an image', async () => {
+      const result = await service.previewCvTemplate('a1', {
         latex_source: 'Name: {{fullName}}\\ Contact: {{email}}',
       });
       expect(result.placeholders).toEqual(['fullName', 'email']);
       expect(result.latex).not.toContain('{{');
       expect(result.latex).toContain('Ada Lovelace');
+      // The image is rendered through the same sandbox path and returned inline.
+      expect(previews.renderAdminPreview).toHaveBeenCalledWith(
+        'a1',
+        'Name: {{fullName}}\\ Contact: {{email}}',
+      );
+      expect(result.image).toBe(
+        `data:image/png;base64,${Buffer.from('png-bytes').toString('base64')}`,
+      );
+      expect(result.error).toBeNull();
     });
 
-    it('rejects an invalid preview payload', () => {
-      expect(() => service.previewCvTemplate({})).toThrow(BadRequestException);
-      expect(() =>
-        service.previewCvTemplate({ latex_source: '{{nope}}' }),
-      ).toThrow(BadRequestException);
+    it('keeps the merged source but reports a null image when the sandbox is down', async () => {
+      previews.renderAdminPreview.mockRejectedValue(
+        new ServiceUnavailableException('Live preview is unavailable right now.'),
+      );
+      const result = await service.previewCvTemplate('a1', {
+        latex_source: 'Name: {{fullName}}',
+      });
+      expect(result.placeholders).toEqual(['fullName']);
+      expect(result.latex).toContain('Ada Lovelace');
+      expect(result.image).toBeNull();
+      expect(result.error).toBe('Live preview is unavailable right now.');
+    });
+
+    // The editor marks the failing line from this; the raw pdflatex log is never
+    // part of the response, only the summarizer's line number and message.
+    it('returns the failing line so the editor can mark it', async () => {
+      previews.renderAdminPreview.mockRejectedValue(
+        new UnprocessableEntityException({
+          message: 'Unknown LaTeX command.',
+          error: 'Unprocessable Entity',
+          latexError: { line: 12, message: 'Unknown LaTeX command.' },
+        }),
+      );
+
+      const result = await service.previewCvTemplate('a1', {
+        latex_source: 'Name: {{fullName}}',
+      });
+
+      expect(result.latexError).toEqual({
+        line: 12,
+        message: 'Unknown LaTeX command.',
+      });
+      expect(result.error).toBe('Unknown LaTeX command.');
+    });
+
+    it('reports no line for failures that are not about the source', async () => {
+      previews.renderAdminPreview.mockRejectedValue(
+        new ServiceUnavailableException('Live preview is unavailable right now.'),
+      );
+      const result = await service.previewCvTemplate('a1', {
+        latex_source: 'Name: {{fullName}}',
+      });
+      expect(result.latexError).toBeNull();
+    });
+
+    it('lets a superseded preview propagate its 409 instead of degrading', async () => {
+      previews.renderAdminPreview.mockRejectedValue(
+        new PreviewSupersededException(),
+      );
+      await expect(
+        service.previewCvTemplate('a1', { latex_source: 'Name: {{fullName}}' }),
+      ).rejects.toBeInstanceOf(PreviewSupersededException);
+    });
+
+    it('rejects an invalid preview payload', async () => {
+      await expect(service.previewCvTemplate('a1', {})).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      await expect(
+        service.previewCvTemplate('a1', { latex_source: '{{nope}}' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(previews.renderAdminPreview).not.toHaveBeenCalled();
     });
 
     it('404s when getting or deleting an unknown template', async () => {
@@ -530,10 +611,31 @@ describe('AdminService', () => {
       expect(result).toEqual({ deleted: true });
     });
 
-    it('exposes the documented placeholder set', () => {
+    it('refuses to delete a template that produced generated CVs', async () => {
+      repo.getCvTemplate.mockResolvedValue({ id: 't1' });
+      repo.countGeneratedCvsForTemplate.mockResolvedValue(2);
+      await expect(
+        service.deleteCvTemplate('a1', 't1'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(repo.deleteCvTemplate).not.toHaveBeenCalled();
+    });
+
+    it('exposes the documented placeholder set with field metadata', () => {
       const { placeholders } = service.getCvTemplatePlaceholders();
       expect(placeholders.map((p) => p.token)).toContain('{{fullName}}');
-      expect(placeholders).toHaveLength(8);
+      expect(placeholders).toHaveLength(10);
+      // Each entry documents the field for the admin editor, and flags the
+      // multi-line ones (each line becomes its own line in the PDF).
+      const experience = placeholders.find((p) => p.name === 'experience');
+      expect(experience).toMatchObject({
+        token: '{{experience}}',
+        label: 'Experience',
+        multiline: true,
+      });
+      expect(experience?.hint.length).toBeGreaterThan(0);
+      expect(placeholders.find((p) => p.name === 'email')).toMatchObject({
+        multiline: false,
+      });
     });
   });
 });

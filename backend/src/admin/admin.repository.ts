@@ -321,6 +321,14 @@ export class AdminRepository {
     return this.getCvTemplate(id);
   }
 
+  async countGeneratedCvsForTemplate(id: string) {
+    const result = await this.db.query(
+      'SELECT COUNT(*)::int AS count FROM generated_cvs WHERE template_id = $1',
+      [id],
+    );
+    return Number(result.rows[0]?.count ?? 0);
+  }
+
   async deleteCvTemplate(id: string) {
     await this.db.query('DELETE FROM cv_templates WHERE id = $1', [id]);
   }

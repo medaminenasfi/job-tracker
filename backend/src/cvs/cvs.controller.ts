@@ -18,9 +18,10 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { createReadStream, existsSync } from 'fs';
 import { join } from 'path';
 import { Response } from 'express';
-import { CvsService, cvMaxBytes } from './cvs.service';
+import { CvsService, BUILT_CV_SOURCE, cvMaxBytes } from './cvs.service';
 import { MulterExceptionFilter } from './multer-exception.filter';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { generatedCvDir } from '../latex/latex-build.service';
 
 @UseGuards(JwtAuthGuard)
 @UseFilters(new MulterExceptionFilter())
@@ -76,7 +77,23 @@ export class CvsController {
     @Res() res: Response,
   ) {
     // Ownership-checked: throws 404 for missing rows or other users' CVs.
-    await this.cvsService.findOne(req.user.id, id);
+    const cv = await this.cvsService.findOne(req.user.id, id);
+    // A built CV has no uploaded file — its PDF is the compiled artifact and
+    // shares the row id.
+    if (cv.source === BUILT_CV_SOURCE) {
+      const generated = join(generatedCvDir(), `${id}.pdf`);
+      if (existsSync(generated)) {
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader(
+          'Content-Disposition',
+          `attachment; filename="cv-${id}.pdf"`,
+        );
+        createReadStream(generated).pipe(res);
+        return;
+      }
+      res.status(404).json({ message: 'File not found' });
+      return;
+    }
     // The storage name is <id>.<kind>; try both extensions.
     for (const ext of ['pdf', 'docx']) {
       const filePath = join(this.cvsService.uploadsDir, `${id}.${ext}`);

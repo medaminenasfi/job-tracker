@@ -30,6 +30,11 @@ services:
     restart: unless-stopped
 
   backend:
+    # Dockerfile.dev adds poppler-utils (pdftotext) to the stock node image, so a
+    # dev container extracts PDF text the same way production does. See that file.
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
     image: node:20-alpine
     container_name: jobtracker_backend
     working_dir: /app

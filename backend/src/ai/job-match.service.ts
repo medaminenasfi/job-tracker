@@ -13,7 +13,17 @@ export class JobMatchService {
       yearsExperience?: number | null;
       skills?: string[];
     },
+    cvData?: {
+      skills?: string[];
+      experience?: { text: string; dateRange?: string }[];
+      education?: { text: string; dateRange?: string }[];
+    } | null,
   ): Promise<JobMatchResult> {
+    // Prefer CV skills/experience over profile when available
+    const effectiveSkills = cvData?.skills?.length ? cvData.skills : profile.skills ?? [];
+    const cvExperience = cvData?.experience ?? [];
+    const cvEducation = cvData?.education ?? [];
+
     return this.ai.completeJson(
       [
         {
@@ -29,8 +39,15 @@ export class JobMatchService {
             profile: {
               headline: profile.headline ?? null,
               yearsExperience: profile.yearsExperience ?? null,
-              skills: profile.skills ?? [],
+              skills: effectiveSkills,
             },
+            cv: cvData
+              ? {
+                  skills: cvData.skills ?? [],
+                  experience: cvExperience,
+                  education: cvEducation,
+                }
+              : null,
           }),
         },
       ],

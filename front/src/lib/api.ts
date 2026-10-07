@@ -141,3 +141,25 @@ export async function apiJson<T>(path: string, options: RequestInit = {}): Promi
   }
   return body as T;
 }
+
+// Downloads an authenticated file endpoint as a browser download. The endpoint
+// sets Content-Disposition with the real filename, preferred over the caller's
+// fallback name.
+export async function downloadApiFile(
+  path: string,
+  fallbackName: string,
+): Promise<void> {
+  const res = await apiFetch(path);
+  if (!res.ok) {
+    throw new Error(`Download failed (${res.status})`);
+  }
+  const blob = await res.blob();
+  const disposition = res.headers.get('content-disposition') ?? '';
+  const match = /filename="([^"]+)"/.exec(disposition);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = match?.[1] ?? fallbackName;
+  a.click();
+  URL.revokeObjectURL(url);
+}

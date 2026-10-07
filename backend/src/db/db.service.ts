@@ -283,5 +283,23 @@ export class DbService implements OnModuleInit, OnModuleDestroy {
 
       CREATE INDEX IF NOT EXISTS idx_cv_templates_is_active ON cv_templates(is_active);
     `);
+
+    // MVP3 Phase 4 — one row per requested PDF build. `field_values` holds the
+    // user's escaped-at-compile-time values; the LaTeX source stays on the
+    // template, never on the build.
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS generated_cvs (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        template_id uuid NOT NULL REFERENCES cv_templates(id) ON DELETE RESTRICT,
+        field_values jsonb NOT NULL,
+        pdf_url text,
+        status text NOT NULL DEFAULT 'queued',
+        error_message text,
+        created_at timestamptz DEFAULT now()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_generated_cvs_user_id ON generated_cvs(user_id, created_at DESC);
+    `);
   }
 }

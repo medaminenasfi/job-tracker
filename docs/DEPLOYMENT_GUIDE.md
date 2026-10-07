@@ -313,6 +313,11 @@ TURNSTILE_SECRET_KEY=<cloudflare secret>
 TURNSTILE_ALLOWED_HOSTNAMES=<your-app>.vercel.app
 GOOGLE_CLIENT_ID=<optional>           GOOGLE_CLIENT_SECRET=<optional>
 GOOGLE_CALLBACK_URL=https://<your-app>.vercel.app/api/auth/google/callback
+# sandboxed LaTeX → PDF (MVP3 Phase 4). Only for a self-hosted backend that can
+# reach a Docker daemon: builds return 503 "not available" without it.
+DOCKER_SOCKET=/var/run/docker.sock
+LATEX_WORKER_IMAGE=jobtracker/latex-worker:latest   # docker build -t … worker/
+LATEX_COMPILE_TIMEOUT_MS=15000
 # seeding (temporary, remove after): ADMIN_EMAIL / ADMIN_PASSWORD / ADMIN_NAME
 ```
 

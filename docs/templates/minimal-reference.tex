@@ -1,0 +1,61 @@
+\documentclass[letterpaper,11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=0.7in]{geometry}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage[colorlinks=true]{hyperref}
+
+\definecolor{accent}{HTML}{2563EB}
+\titleformat{\section}{\color{accent}\large\bfseries}{}{0em}{}[\color{accent}\titlerule]
+\urlstyle{same}
+\pagestyle{empty}
+
+\begin{document}
+
+{\centering
+  {\Huge\bfseries {{fullName}}}\par
+  \vspace{2pt}
+  {\large\color{accent} {{headline}}}\par
+  \vspace{2pt}
+  {\small {{email}} \textbar{} {{phone}} \textbar{} {{links}}}\par
+}
+\vspace{6pt}
+
+\section{Profile}
+{\obeylines
+\begin{itemize}[leftmargin=0.2in, label={}, itemsep=2pt]
+  \item {{profile}}
+\end{itemize}
+}
+
+\section{Experience}
+{\obeylines
+\begin{itemize}[leftmargin=0.2in, label={}, itemsep=2pt]
+  \item {{experience}}
+\end{itemize}
+}
+
+\section{Education}
+{\obeylines
+\begin{itemize}[leftmargin=0.2in, label={}, itemsep=2pt]
+  \item {{education}}
+\end{itemize}
+}
+
+\section{Certificates}
+{\obeylines
+\begin{itemize}[leftmargin=0.2in, label={}, itemsep=2pt]
+  \item {{certificates}}
+\end{itemize}
+}
+
+\section{Skills}
+{\obeylines
+\begin{itemize}[leftmargin=0.2in, label={}, itemsep=2pt]
+  \item {{skills}}
+\end{itemize}
+}
+
+\end{document}

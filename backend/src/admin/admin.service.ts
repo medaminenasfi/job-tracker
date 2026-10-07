@@ -1,7 +1,9 @@
 import {
   BadRequestException,
   ForbiddenException,
+  HttpException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -10,6 +12,11 @@ import { z } from 'zod';
 import { AdminRepository } from './admin.repository';
 import { AuthService } from '../auth/auth.service';
 import { ADMIN_COOKIE } from '../auth/auth.cookies';
+import {
+  LatexPreviewService,
+  PreviewSupersededException,
+  previewDataUrl,
+} from '../latex/latex-preview.service';
 import {
   adminLoginSchema,
   adminRegisterSchema,
@@ -25,34 +32,26 @@ import {
   updateCvTemplateSchema,
   cvTemplatePreviewSchema,
 } from './admin.schemas';
+import type { LatexFailure } from '../latex/latex-log';
 import {
+  CV_TEMPLATE_FIELD_META,
   CV_TEMPLATE_PLACEHOLDERS,
+  CV_TEMPLATE_SAMPLE_DATA,
   LatexTemplateError,
   mergeTemplate,
   validateTemplateSource,
-} from './cv-templates-latex';
+} from '../latex/latex-template';
 
 const DEFAULT_INVITE_TTL_DAYS = 7;
 
-// Sample data for the admin Preview action. Values deliberately include LaTeX
-// special characters so the preview also demonstrates the escaping.
-const CV_TEMPLATE_SAMPLE_DATA = {
-  fullName: 'Ada Lovelace',
-  headline: 'Senior Full-Stack Engineer',
-  email: 'ada.lovelace@example.com',
-  phone: '+33 6 12 34 56 78',
-  links: 'linkedin.com/in/adalovelace — github.com/adalovelace',
-  experience:
-    'Senior Engineer, Analytical Engines Ltd (2021 – Present)\\nShipped a R&D platform used by 40+ teams.',
-  education: 'MSc Mathematics, University of London (2015 – 2018)',
-  skills: 'TypeScript, React, Node.js, PostgreSQL, Docker',
-} as const;
-
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     private readonly adminRepo: AdminRepository,
     private readonly authService: AuthService,
+    private readonly previews: LatexPreviewService,
   ) {}
 
   // Admin login reuses the shared credential check, then additionally requires
@@ -264,12 +263,15 @@ export class AdminService {
   // ---- CV templates (MVP3 Phase 3) ----
 
   // Placeholder catalogue so the admin UI can document exactly what a template
-  // may embed.
+  // may embed: the token to insert, a human label, what the field holds, and
+  // whether the builder renders it as a multi-line textarea (each line becomes
+  // its own line in the PDF).
   getCvTemplatePlaceholders() {
     return {
       placeholders: CV_TEMPLATE_PLACEHOLDERS.map((name) => ({
         name,
         token: `{{${name}}}`,
+        ...CV_TEMPLATE_FIELD_META[name],
       })),
     };
   }
@@ -335,6 +337,14 @@ export class AdminService {
   async deleteCvTemplate(adminId: string, id: string) {
     const existing = await this.adminRepo.getCvTemplate(id);
     if (!existing) throw new NotFoundException('Template not found');
+    // generated_cvs references the template with ON DELETE RESTRICT, so a
+    // template that produced user PDFs must be deactivated, never dropped.
+    const inUse = await this.adminRepo.countGeneratedCvsForTemplate(id);
+    if (inUse > 0) {
+      throw new BadRequestException(
+        `Template is used by ${inUse} generated CV(s) — deactivate it instead`,
+      );
+    }
     await this.adminRepo.deleteCvTemplate(id);
     await this.adminRepo.writeAuditLog(
       adminId,
@@ -347,8 +357,9 @@ export class AdminService {
 
   // Renders the template with sample data through the real merge pipeline, so an
   // admin can confirm placeholders land correctly before activating. Phase 4
-  // compiles this output to PDF inside the sandbox.
-  previewCvTemplate(data: unknown) {
+  // compiles this output to PDF inside the sandbox; Phase 6 also renders a live
+  // low-res preview image through the exact same sandbox path.
+  async previewCvTemplate(adminId: string, data: unknown) {
     const parsed = cvTemplatePreviewSchema.safeParse(data ?? {});
     if (!parsed.success) {
       throw new BadRequestException(
@@ -356,9 +367,61 @@ export class AdminService {
       );
     }
     const placeholders = this.assertValidLatex(parsed.data.latex_source);
+    const latex = mergeTemplate(
+      parsed.data.latex_source,
+      CV_TEMPLATE_SAMPLE_DATA,
+    );
+
+    // The image is best-effort: the editor stays usable (merged source +
+    // placeholders) even when the sandbox is down or the template does not
+    // compile, and the client shows an inline note instead of a broken preview.
+    // A superseded request is not a failure — let its 409 through so the client
+    // discards it. Only generic messages are surfaced, never compiler internals.
+    let image: string | null = null;
+    let error: string | null = null;
+    // Failing line number for the editor's inline marker. Comes from the log
+    // summarizer, which returns only a number and a whitelisted message.
+    let latexError: LatexFailure | null = null;
+    try {
+      const result = await this.previews.renderAdminPreview(
+        adminId,
+        parsed.data.latex_source,
+      );
+      image = previewDataUrl(result.png);
+    } catch (err) {
+      if (err instanceof PreviewSupersededException) throw err;
+      error =
+        err instanceof HttpException ? err.message : 'Live preview failed.';
+      latexError = this.latexFailureFrom(err);
+      this.logger.warn(
+        `Admin template preview failed: ${
+          err instanceof Error ? err.message : 'unknown error'
+        }`,
+      );
+    }
+    return { placeholders, latex, image, error, latexError };
+  }
+
+  /**
+   * Pulls the structured compile failure out of a preview exception, if there is
+   * one. Returns null for every other failure mode (sandbox down, timeout), where
+   * the coarse message is all the admin can be told.
+   */
+  private latexFailureFrom(err: unknown): LatexFailure | null {
+    if (!(err instanceof HttpException)) return null;
+    const body = err.getResponse();
+    if (!body || typeof body !== 'object' || !('latexError' in body)) {
+      return null;
+    }
+    const candidate = (body as { latexError?: unknown }).latexError;
+    if (!candidate || typeof candidate !== 'object') return null;
+    const { line, message } = candidate as {
+      line?: unknown;
+      message?: unknown;
+    };
     return {
-      placeholders,
-      latex: mergeTemplate(parsed.data.latex_source, CV_TEMPLATE_SAMPLE_DATA),
+      ...(typeof line === 'number' ? { line } : {}),
+      message: typeof message === 'string' ? message : 'Compile failed.',
     };
   }
 

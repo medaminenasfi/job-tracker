@@ -990,38 +990,54 @@ create table generated_cvs (
 
 > ✅ **Done when:** a user can go from template pick to a downloaded, correctly rendered PDF end-to-end.
 
-### MVP 3 — Phase 6: Enrich AI Job Match with CV Data
+MVP 3 — Phase 6: Live Split-View Preview (Admin & User)
+Goal: Both the admin's template editor and the user's CV Builder form show a live preview — fields/editor on the left, the compiled CV on the right — updating as values change, without recompiling on every keystroke or bypassing the Phase 4 sandbox rules.
 
-**Goal:** Close the loop back to MVP2 — once a real CV exists, matching should use it.
+Key design decision: a full PDF compile is too slow to run on every keystroke, so this phase adds a debounced, low-res preview path through the same sandbox — not a separate, less-secure preview engine. The two non-negotiable rules from the top of MVP3 (escape everything, compile only in the Docker sandbox) apply here exactly as they do to final generation.
 
-**Tasks:**
+Backend tasks:
 
-- Extend `JobMatchService.computeMatch` (MVP2 Phase 2) to accept an optional `cvText`/`structuredData` argument, preferring it over bare profile skills when the job has a linked `cv_id`.
-- No new endpoint needed — `POST /jobs/:id/match` just passes richer input when available.
-- Re-run Phase 2's "Done when" check with a real CV linked to a job and confirm the match score reflects CV content, not just the profile's skill tags.
+Add poppler-utils to the worker Dockerfile (Phase 4) so the container can run pdftoppm -png -r 80 output.pdf preview after pdflatex succeeds — a fast, low-resolution page image instead of the full PDF, which is all a live preview needs.
+POST /cv-templates/:id/preview (admin) and POST /cvs/build/preview (user) — same escape → merge → enqueue flow as Phase 4's /cvs/build, but on a separate, shorter-timeout queue (e.g. 8s instead of 10–15s) and marked ephemeral: the output PNG is returned directly and never written to generated_cvs or permanent file storage.
+Cache identical requests briefly (Redis, keyed by a hash of template_id + field_values, short TTL) so retyping the same value twice in quick succession doesn't recompile.
+Concurrency cap per user: at most one in-flight preview job per user/admin — a new preview request cancels or supersedes the previous one rather than queuing behind it, so rapid typing can't spawn a pile of containers.
+Rate-limit the preview endpoints separately from both the AI-call cap and the final-generation rate limit (Phase 4) — previews are called far more often and need a more generous, differently-tuned limit.
+Frontend tasks (admin template editor, extends Phase 3):
 
-> ✅ **Done when:** linking a CV to a job and recomputing the match produces a visibly more detailed/accurate result than the profile-only version from MVP2.
+Split view: .tex source editor on the left (plain textarea is fine; a syntax-highlighted editor like CodeMirror is a nice-to-have, not required), compiled preview image on the right.
+Debounce edits (~600–800ms after the last keystroke) before calling the preview endpoint; cancel any in-flight request (AbortController) when a new one fires.
+Loading state while compiling; on error, keep showing the last successful preview rather than blanking the pane, with a small inline error note — a broken edit-in-progress shouldn't erase the admin's last good view.
+Frontend tasks (user CV Builder, extends Phase 5):
 
-### MVP 3 — Phase 7: Hardening
+Same split-view pattern: form fields on the left (profile/CV data from Phases 1–2), live preview image on the right.
+Same debounce + cancel-in-flight + "keep last good preview on error" behavior as the admin editor — one shared <SplitPreviewPane /> component, reused by both.
+The real [ Generate PDF ] action (Phase 5) remains a separate, explicit step that runs the full-resolution compile and persists to generated_cvs — the live preview never substitutes for it.
+✅ Done when: editing a template (admin) or a form field (user) updates the preview within roughly a second of pausing, typing rapidly for several seconds produces at most one or two actual compiles (not one per keystroke), a deliberately malicious field value is still neutralized exactly as in Phase 4's injection test (re-run that suite against the preview endpoints too), and killing a browser tab mid-typing leaves no orphaned containers behind.
 
-**Tasks:**
+MVP 3 — Phase 7: Enrich AI Job Match with CV Data
+Goal: Close the loop back to MVP2 — once a real CV exists, matching should use it.
 
-- Cross-user isolation tests on `/cvs/*`, `/admin/cv-templates/*`, and the build/generate endpoints.
-- File upload hardening: size limits, real MIME validation, storage outside the web root.
-- **LaTeX injection test suite** — a fixed set of adversarial field values (command injection attempts, `\input`, `\write18`, deeply nested braces, extremely long strings) run through the real pipeline on every CI run, asserting the output is always literal text or a clean failure, never a compiler exploit or a hung container.
-- Container escape hygiene: confirm `--network none` and `--read-only` are actually applied (not just configured) by inspecting a running job's container during a test compile.
-- Confirm a hung/forced-timeout compile never leaves an orphaned container (see Phase 4's Done-when).
+Tasks:
 
-> ✅ **Done when:** the injection test suite passes and a manual container inspection during a test job confirms no network access and a read-only filesystem.
+Extend JobMatchService.computeMatch (MVP2 Phase 2) to accept an optional cvText/structuredData argument, preferring it over bare profile skills when the job has a linked cv_id.
+No new endpoint needed — POST /jobs/:id/match just passes richer input when available.
+Re-run Phase 2's "Done when" check with a real CV linked to a job and confirm the match score reflects CV content, not just the profile's skill tags.
+Done when: linking a CV to a job and recomputing the match produces a visibly more detailed/accurate result than the profile-only version from MVP2.
 
-### MVP 3 — Phase 8: Rollout
+MVP 3 — Phase 8: Hardening
+Tasks:
 
-**Tasks:** feature-flag if rolling out gradually; update the privacy policy (CV content is sent to a third-party AI provider for parsing); smoke-test the full loop on production: upload → parse → correct a field → pick a template → generate → download → link to a job → see an improved match score.
+Cross-user isolation tests on /cvs/*, /admin/cv-templates/*, and the build/generate endpoints.
+File upload hardening: size limits, real MIME validation, storage outside the web root.
+LaTeX injection test suite — a fixed set of adversarial field values (command injection attempts, \input, \write18, deeply nested braces, extremely long strings) run through the real pipeline on every CI run, asserting the output is always literal text or a clean failure, never a compiler exploit or a hung container.
+Container escape hygiene: confirm --network none and --read-only are actually applied (not just configured) by inspecting a running job's container during a test compile.
+Confirm a hung/forced-timeout compile never leaves an orphaned container (see Phase 4's Done-when).
+Done when: the injection test suite passes and a manual container inspection during a test job confirms no network access and a read-only filesystem.
 
-> ✅ **Done when:** that full walkthrough works on production with nothing from MVP1/MVP2 regressed.
+MVP 3 — Phase 9: Rollout
+Tasks: feature-flag if rolling out gradually; update the privacy policy (CV content is sent to a third-party AI provider for parsing); smoke-test the full loop on production: upload → parse → correct a field → pick a template → generate → download → link to a job → see an improved match score.
 
----
-
+Done when: that full walkthrough works on production with nothing from MVP1/MVP2 regressed.
 # 🟣 MVP 4 — Cover Letter Builder
 
 > **Product promise:** A tailored cover letter draft for any job, in seconds — always reviewed and edited by the user before it's considered final.

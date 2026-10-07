@@ -11,12 +11,20 @@ jest.mock('crypto', () => ({
 // run real PDF/DOCX extraction.
 const pdfParseMock = jest.fn<(buffer: Buffer) => Promise<{ text: string }>>();
 jest.mock('pdf-parse', () => pdfParseMock);
+// pdftotext is the primary PDF extractor; pdf-parse is only the degraded
+// fallback for environments without poppler.
+const extractPdfTextMock = jest.fn<(buffer: Buffer) => Promise<string>>();
+jest.mock('./pdf-text', () => ({
+  extractPdfText: extractPdfTextMock,
+  PdfTextToolMissingError: class PdfTextToolMissingError extends Error {},
+}));
 const extractRawTextMock =
   jest.fn<(opts: { buffer: Buffer }) => Promise<{ value: string }>>();
 jest.mock('mammoth', () => ({ extractRawText: extractRawTextMock }));
 const mkdirMock = jest.fn<() => Promise<void>>();
 const writeFileMock = jest.fn<(path: string, data: Buffer) => Promise<void>>();
 const unlinkMock = jest.fn<(path: string) => Promise<void>>();
+const readFileMock = jest.fn<() => Promise<Buffer>>();
 const aiParserMock =
   jest.fn<(text: string) => Promise<Record<string, unknown>>>();
 const enforceMonthlyCapMock = jest.fn<(userId: string) => Promise<void>>();
@@ -25,13 +33,16 @@ jest.mock('fs/promises', () => ({
   mkdir: mkdirMock,
   writeFile: writeFileMock,
   unlink: unlinkMock,
+  readFile: readFileMock,
 }));
 
-import { CvsService, cvMaxBytes } from './cvs.service';
+import { CvsService, cvMaxBytes, defaultCvLabel } from './cvs.service';
 import { CvRuleParserService } from './cv-rule-parser';
 import { CvAiParserService } from './cv-ai-parser';
 import { AiService } from '../ai/ai.service';
 import { DbService } from '../db/db.service';
+import { PdfTextToolMissingError } from './pdf-text';
+import { join } from 'path';
 
 const queryMock =
   jest.fn<
@@ -68,10 +79,16 @@ const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
 beforeEach(() => {
   queryMock.mockReset();
   pdfParseMock.mockReset();
+  extractPdfTextMock.mockReset();
   extractRawTextMock.mockReset();
   mkdirMock.mockReset();
   writeFileMock.mockReset();
   unlinkMock.mockReset();
+  // No stored file by default — tests that exercise refreshExtractedText
+  // override this. Keeps every existing expectations unchanged.
+  readFileMock.mockReset().mockRejectedValue(
+    Object.assign(new Error('gone'), { code: 'ENOENT' }),
+  );
   aiParserMock.mockReset();
   enforceMonthlyCapMock.mockReset();
   recordCallMock.mockReset();
@@ -91,13 +108,14 @@ describe('CvsService', () => {
 
   describe('upload', () => {
     it('extracts PDF text, stores the file and row, scoped to the user', async () => {
-      pdfParseMock.mockResolvedValue({ text: '  pdf text  ' });
+      // extractPdfText already trims its stdout.
+      extractPdfTextMock.mockResolvedValue('pdf text');
       queryMock.mockResolvedValue({ rows: [{ id: 'cv1' }] });
       const service = makeService();
 
       const row = await service.upload('user1', makeFile(PDF_BYTES), 'Dev CV');
 
-      expect(pdfParseMock).toHaveBeenCalledWith(PDF_BYTES);
+      expect(extractPdfTextMock).toHaveBeenCalledWith(PDF_BYTES);
       expect(mkdirMock).toHaveBeenCalled();
       expect(writeFileMock).toHaveBeenCalledWith(
         expect.stringContaining('cv1.pdf'),
@@ -118,6 +136,36 @@ describe('CvsService', () => {
       expect(row).toEqual({ id: 'cv1' });
     });
 
+    // Degraded mode only: poppler missing means pdf-parse, which glues words
+    // together, but an upload must still succeed rather than hard-fail.
+    it('falls back to pdf-parse when poppler is unavailable', async () => {
+      extractPdfTextMock.mockRejectedValue(new PdfTextToolMissingError());
+      pdfParseMock.mockResolvedValue({ text: 'glued text' });
+      queryMock.mockResolvedValue({ rows: [{ id: 'cv1' }] });
+      const service = makeService();
+
+      await service.upload('user1', makeFile(PDF_BYTES), 'Dev CV');
+
+      expect(pdfParseMock).toHaveBeenCalledWith(PDF_BYTES);
+      expect(queryMock).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO cvs'),
+        expect.arrayContaining(['glued text']),
+      );
+    });
+
+    // A missing poppler must not be able to mask a real extraction failure.
+    it('does not fall back when extraction fails for another reason', async () => {
+      extractPdfTextMock.mockRejectedValue(
+        new Error('Syntax Error: encrypted'),
+      );
+      const service = makeService();
+
+      await expect(
+        service.upload('user1', makeFile(PDF_BYTES), 'CV'),
+      ).rejects.toThrow('Could not read the file');
+      expect(pdfParseMock).not.toHaveBeenCalled();
+    });
+
     it('extracts DOCX text via mammoth', async () => {
       extractRawTextMock.mockResolvedValue({ value: 'docx text' });
       queryMock.mockResolvedValue({ rows: [{ id: 'cv2' }] });
@@ -132,10 +180,39 @@ describe('CvsService', () => {
       );
     });
 
-    it('rejects a missing label', async () => {
+    // A blank label used to be a hard error, which is what pushed users into
+    // typing throwaway identifiers like "fukk" that then became the permanent
+    // name in every dropdown.
+    it('derives a label when the user supplies none', async () => {
+      extractPdfTextMock.mockResolvedValue('Ada Lovelace\nSenior Engineer');
+      queryMock.mockResolvedValue({ rows: [{ id: 'cv1' }] });
+      const service = makeService();
+
+      await service.upload('user1', makeFile(PDF_BYTES), '   ');
+
+      expect(queryMock).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO cvs'),
+        expect.arrayContaining(['Ada Lovelace']),
+      );
+    });
+
+    it('still accepts a label the user chose', async () => {
+      extractPdfTextMock.mockResolvedValue('Ada Lovelace\nSenior Engineer');
+      queryMock.mockResolvedValue({ rows: [{ id: 'cv1' }] });
+      const service = makeService();
+
+      await service.upload('user1', makeFile(PDF_BYTES), 'My CV for the bank');
+
+      expect(queryMock).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO cvs'),
+        expect.arrayContaining(['My CV for the bank']),
+      );
+    });
+
+    it('rejects an over-long label', async () => {
       const service = makeService();
       await expect(
-        service.upload('user1', makeFile(PDF_BYTES), '   '),
+        service.upload('user1', makeFile(PDF_BYTES), 'x'.repeat(200)),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -162,11 +239,54 @@ describe('CvsService', () => {
     });
 
     it('maps parser failures to a generic message', async () => {
-      pdfParseMock.mockRejectedValue(new Error('parser exploded'));
+      extractPdfTextMock.mockRejectedValue(new Error('parser exploded'));
       const service = makeService();
       await expect(
         service.upload('user1', makeFile(PDF_BYTES), 'CV'),
       ).rejects.toThrow('Could not read the file');
+    });
+  });
+
+  describe('defaultCvLabel', () => {
+    const day = new Date('2026-03-04T10:00:00Z');
+
+    it('keeps a label the user actually typed', () => {
+      expect(
+        defaultCvLabel('  Backend CV  ', { fullName: 'Ada' }, day),
+      ).toBe('Backend CV');
+    });
+
+    it('combines the parsed name and headline', () => {
+      expect(
+        defaultCvLabel('', { fullName: 'Ada Lovelace', headline: 'Senior Engineer' }, day),
+      ).toBe('Ada Lovelace — Senior Engineer');
+    });
+
+    it('falls back to the name alone when there is no headline', () => {
+      expect(defaultCvLabel('  ', { fullName: 'Ada Lovelace' }, day)).toBe(
+        'Ada Lovelace',
+      );
+    });
+
+    it('dates the label when nothing could be parsed out of the file', () => {
+      expect(defaultCvLabel('', {}, day)).toBe('CV uploaded 2026-03-04');
+    });
+
+    it('treats a two-character label as no label', () => {
+      expect(defaultCvLabel('ab', { fullName: 'Ada Lovelace' }, day)).toBe(
+        'Ada Lovelace',
+      );
+    });
+
+    // A very long headline must not overflow the column.
+    it('truncates an over-long generated label', () => {
+      const label = defaultCvLabel(
+        '',
+        { fullName: 'Ada Lovelace', headline: 'x'.repeat(300) },
+        day,
+      );
+      expect(label.length).toBeLessThanOrEqual(120);
+      expect(label.endsWith('...')).toBe(true);
     });
   });
 
@@ -244,6 +364,23 @@ describe('CvsService', () => {
         NotFoundException,
       );
     });
+
+    it('also removes the build record and the generated PDF for a built CV', async () => {
+      queryMock
+        .mockResolvedValueOnce({ rows: [{ id: 'cv1', source: 'built' }] })
+        .mockResolvedValue({ rows: [], rowCount: 1 });
+      const service = makeService();
+
+      await service.remove('user1', 'cv1');
+
+      expect(queryMock).toHaveBeenCalledWith(
+        'DELETE FROM generated_cvs WHERE id = $1 AND user_id = $2',
+        ['cv1', 'user1'],
+      );
+      expect(unlinkMock).toHaveBeenCalledWith(
+        expect.stringContaining(join('uploads', 'generated', 'cv1.pdf')),
+      );
+    });
   });
 
   describe('parseCv', () => {
@@ -277,6 +414,8 @@ describe('CvsService', () => {
           'parsed',
           'cv1',
           'user1',
+          // AI re-parse reuses the stored text; parsed_text is untouched.
+          null,
         ],
       );
       expect(row).toMatchObject({ parse_method: 'ai', parse_status: 'parsed' });
@@ -287,6 +426,21 @@ describe('CvsService', () => {
       await expect(service.parseCv('user1', 'cv1', 'magic')).rejects.toThrow(
         BadRequestException,
       );
+    });
+
+    it('refuses to re-parse a CV built from a template', async () => {
+      queryMock.mockResolvedValueOnce({
+        rows: [{ ...cvRow, source: 'built', parsed_text: null }],
+      });
+      const service = makeService();
+
+      await expect(service.parseCv('user1', 'cv1', 'ai')).rejects.toThrow(
+        BadRequestException,
+      );
+      // No AI spend and no overwrite of the structured data the user typed.
+      expect(aiParserMock).not.toHaveBeenCalled();
+      expect(enforceMonthlyCapMock).not.toHaveBeenCalled();
+      expect(queryMock).toHaveBeenCalledTimes(1);
     });
 
     it('throws NotFound for another user CV', async () => {
@@ -314,6 +468,51 @@ describe('CvsService', () => {
       expect(aiParserMock).not.toHaveBeenCalled();
       expect(row.parse_method).toBe('rule_based');
       expect(row.parse_status).toBe('partial');
+    });
+
+    // The point of the refresh: a CV whose stored text predates the pdftotext
+    // fix must come back with *newly extracted* text, not the old glued one.
+    it('re-extracts from the stored file before re-parsing', async () => {
+      queryMock
+        .mockResolvedValueOnce({
+          rows: [{ ...cvRow, parsed_text: 'FreelanceMai 2026 – Présent' }],
+        })
+        .mockResolvedValue({ rows: [{ ...cvRow }] });
+      readFileMock.mockResolvedValue(Buffer.from('%PDF-1.5 fake'));
+      extractPdfTextMock.mockResolvedValue(
+        'Expérience\nFreelance    Mai 2026 – Présent\n\nCompétences Techniques\nReact',
+      );
+      const service = makeService();
+
+      const row = await service.parseCv('user1', 'cv1', 'rule');
+
+      expect(extractPdfTextMock).toHaveBeenCalledTimes(1);
+      const [, values] = queryMock.mock.calls.at(-1)!;
+      // parsed_text column is refreshed to the fresh extraction, not the
+      // stale glued text it replaces.
+      expect(values?.[5]).toBe(
+        'Expérience\nFreelance    Mai 2026 – Présent\n\nCompétences Techniques\nReact',
+      );
+      expect(JSON.parse(String(values?.[0])).skills).toContain('React');
+      expect(row).toBeDefined();
+    });
+
+    it('falls back to the stored text when the file is gone', async () => {
+      queryMock
+        .mockResolvedValueOnce({
+          rows: [{ ...cvRow, parsed_text: 'Skills\nPython' }],
+        })
+        .mockResolvedValue({ rows: [{ ...cvRow }] });
+      // readFileMock already rejects ENOENT by default.
+      const service = makeService();
+
+      await service.parseCv('user1', 'cv1', 'rule');
+
+      expect(extractPdfTextMock).not.toHaveBeenCalled();
+      const [, values] = queryMock.mock.calls.at(-1)!;
+      // No file, no fresh text: parsed_text column is preserved, and the
+      // rule parser still runs over the stored text.
+      expect(values?.[5]).toBe('Skills\nPython');
     });
   });
 });

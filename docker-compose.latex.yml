@@ -1,0 +1,26 @@
+# Optional overlay that enables MVP3 Phase 4 (sandboxed LaTeX → PDF).
+#
+#   docker build -t jobtracker/latex-worker:latest worker/
+#   docker compose -f docker-compose.yml -f docker-compose.latex.yml up -d backend
+#
+# SECURITY: this mounts the Docker socket into the API container, which is
+# equivalent to root on the host for anything that can reach the API. Keep it
+# for local/trusted deployments only; the default docker-compose.yml does NOT
+# mount it, and without it PDF builds simply fail with a generic message.
+
+services:
+  # Build helper: never started, only `docker compose ... build latex-worker`.
+  latex-worker:
+    image: jobtracker/latex-worker:latest
+    build:
+      context: ./worker
+    profiles: ["build"]
+
+  backend:
+    volumes:
+      # Compose merges `volumes` across files, so only the extra mount is listed.
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DOCKER_SOCKET=/var/run/docker.sock
+      - LATEX_WORKER_IMAGE=jobtracker/latex-worker:latest
+      - LATEX_COMPILE_TIMEOUT_MS=15000

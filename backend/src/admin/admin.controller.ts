@@ -10,6 +10,7 @@ import {
   Request,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -144,8 +145,14 @@ export class AdminController {
     return this.adminService.deleteCvTemplate(this.adminId(req), id);
   }
 
+  // Live preview compiles in the sandbox on every editor pause, so it gets the
+  // same generous, separate budget as the user build-preview endpoint.
   @Post('cv-templates/preview')
-  previewCvTemplate(@Body() body: unknown) {
-    return this.adminService.previewCvTemplate(body);
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  previewCvTemplate(
+    @Request() req: { user: { id: string } },
+    @Body() body: unknown,
+  ) {
+    return this.adminService.previewCvTemplate(this.adminId(req), body);
   }
 }

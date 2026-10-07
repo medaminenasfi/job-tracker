@@ -12,13 +12,7 @@ import { Field, Input, Textarea } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { Alert } from '@/components/ui/Alert';
 import { ErrorState } from '@/components/ui/EmptyState';
-
-type Profile = {
-  headline: string | null;
-  yearsExperience: number | null;
-  skills: string[];
-  bio: string | null;
-};
+import type { Profile } from '@/lib/types';
 
 export default function ProfilePage() {
   const queryClient = useQueryClient();

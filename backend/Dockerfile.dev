@@ -1,0 +1,19 @@
+# Dev image for the NestJS API (docker-compose.yml).
+#
+# Why this exists rather than `image: node:20-alpine`: the dev container needs
+# poppler's pdftotext, which the stock image does not ship. PDF text extraction
+# degrades to pdf-parse without it (see src/cvs/pdf-text.ts), and pdf-parse drops
+# the spaces between words — which is the bug this package exists to fix. A dev
+# container without poppler would silently hide it, so the tool is installed here
+# too. Production builds use the multi-stage Dockerfile, which does the same.
+#
+# The source is bind-mounted and node_modules is kept in a volume, so nothing
+# here is cached from the host: only the system packages are.
+
+FROM node:20-alpine
+
+# bash: the compose command shells out through it. poppler-utils: pdftotext, used
+# by the PDF extractor to keep inter-word spacing intact.
+RUN apk add --no-cache poppler-utils
+
+WORKDIR /app

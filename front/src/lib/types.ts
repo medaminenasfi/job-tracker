@@ -168,6 +168,54 @@ export interface AdminCvTemplate {
   latex_length?: number | null;
 }
 
+// ---- CV builder (MVP3 Phase 5) ----
+
+// GET /api/profile (MVP2 Phase 1) — also used to pre-fill the builder form.
+export interface Profile {
+  headline: string | null;
+  yearsExperience: number | null;
+  skills: string[];
+  bio: string | null;
+}
+
+// Active template from GET /api/cv-templates (metadata only — the LaTeX source
+// is admin-only and never leaves the server).
+export interface CvTemplate {
+  id: string;
+  name: string;
+  description?: string | null;
+  preview_image_url?: string | null;
+  language: TemplateLanguage;
+}
+
+// A PDF build job. Compiling is asynchronous, so the client polls until the
+// status settles on 'ready' or 'failed'.
+export type BuildStatus = 'queued' | 'compiling' | 'ready' | 'failed';
+
+export interface GeneratedCv {
+  id: string;
+  user_id: string;
+  template_id: string;
+  field_values: Partial<Record<CvTemplateField, string>>;
+  pdf_url?: string | null;
+  status: BuildStatus;
+  error_message?: string | null;
+  created_at: string;
+}
+
+// The fixed placeholder set a template may use.
+export type CvTemplateField =
+  | 'fullName'
+  | 'headline'
+  | 'profile'
+  | 'email'
+  | 'phone'
+  | 'links'
+  | 'experience'
+  | 'education'
+  | 'certificates'
+  | 'skills';
+
 // ---- User dashboard home (Phase 8) ----
 
 export interface Announcement {

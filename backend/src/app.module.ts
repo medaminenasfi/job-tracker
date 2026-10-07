@@ -13,6 +13,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { AiModule } from './ai/ai.module';
 import { ProfileModule } from './profile/profile.module';
 import { CvsModule } from './cvs/cvs.module';
+import { LatexModule } from './latex/latex.module';
 
 import { NotificationsModule } from './notifications/notifications.module';
 import { AnalyticsModule } from './analytics/analytics.module';
@@ -35,6 +36,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     AiModule,
     ProfileModule,
     CvsModule,
+    LatexModule,
     NotificationsModule,
     AnalyticsModule,
     CompaniesModule,

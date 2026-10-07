@@ -387,6 +387,47 @@ head -c 6MB /dev/urandom > big.pdf             # over CV_MAX_SIZE_MB → 400
 UI checks: rename, mark default (only one default per user), delete; CV dropdown
 in Add Job / Job Details lists only your own CVs.
 
+#### PDF text extraction (poppler)
+
+PDFs are extracted with `pdftotext -layout`, not with the JS extractor. Word and
+Google Docs exports store each word as its own text-showing operator with the
+space implied by position, so a string-concatenating extractor yields
+`SeniorFull-StackEngineer` and the parser then stops recognising section
+headers — which is what pushes skills into Experience. `pdf-parse` is kept only
+as a logged degraded fallback when the binary is missing.
+
+```bash
+docker exec jobtracker_backend sh -c "command -v pdftotext"   # /usr/bin/pdftotext
+# Missing → the backend logs a warning and falls back to pdf-parse; the upload
+# still succeeds but the parsed text has glued words. Do not "fix" that in the
+# parser — install poppler-utils (both backend images already do).
+```
+
+What to check on a real PDF:
+
+- `structured_data.fullName` is `Mohamed Amine Nasfi`, not `MohamedAmineNasfi`.
+- A two-column entry keeps its gap: `Freelance    À distance`.
+- Skills land in `structured_data.skills`, not in `experience`. A French CV has
+  **two** skills blocks (`Compétences Techniques` then `Langues`); both are kept
+  and appended, so dropping either one would silently lose the technologies.
+
+```bash
+# Automated (real poppler, real fixtures):
+cd backend
+CV_INTEGRATION=1 npx jest src/cvs/pdf-text.integration
+# The backend container has poppler, so run it there when the host lacks it:
+docker exec jobtracker_backend sh -c "cd /app && CV_INTEGRATION=1 npx jest src/cvs/pdf-text.integration"
+```
+
+Two fixtures in `backend/test/fixtures/`, both hand-built and uncompressed:
+
+| Fixture | Proves |
+|---|---|
+| `run-together-words.pdf` | spacing is reconstructed (`Senior Full-Stack Engineer`) |
+| `accented-french.pdf` | accented headers survive (`Compétences Techniques`) — a wrong output encoding makes every French header unmatchable |
+
+`.docx` is unaffected: it still goes through `mammoth`, which needs none of this.
+
 ### Phase 2 — Parsing (rule-based + AI)
 
 ```bash
@@ -448,6 +489,324 @@ placeholder chips, Preview with sample data, Edit, Activate/Deactivate, confirm
 Delete. Authorization: normal user → 403 on every `/api/admin/cv-templates*`
 call and `/admin/cv-templates` redirects to `/admin/login`.
 
+The editor also has to make authoring failures actionable:
+
+- **List** — every row shows its preview image or an explicit *No preview image*
+  placeholder (never a silent gap), an `ACTIVE` badge, and the name.
+- **Pre-activation checklist** — three requirements are listed with a tick each:
+  has a name, a Preview that compiled, only documented placeholders. Everything
+  outstanding is listed at once and names the specific token
+  (`{{projects}}`), never just "invalid placeholders". Editing the source after a
+  successful preview re-opens the "preview compiles" requirement, because the
+  previous render says nothing about the current source.
+- **`.tex` editor** — line-numbered gutter, and a compile failure marks the line
+  pdflatex blamed (`Line 4: Unknown LaTeX command…`). Only a whitelisted line
+  number and message are returned; the raw log never reaches the client.
+- **Preview pane** — `Compiling…` / `Up to date` / `Error`. On error the last
+  good render stays on screen under a dismissible banner; dismissing one error
+  does not silence the next, different one.
+
+```bash
+# A failing compile still answers 200/201 with the degraded body, so check
+# image + latexError rather than the status code:
+#   {"image":null,"error":"…","latexError":{"line":4,"message":"…"}}
+```
+
+### Adding a real-world template (e.g. a Word-mirroring LaTeX CV)
+
+The pasted source is the **whole document**, so keep its `\documentclass`,
+preamble and `\newcommand` definitions. Three rules:
+
+1. **Only the 8 fixed placeholders** exist: `{{fullName}}`, `{{headline}}`,
+   `{{email}}`, `{{phone}}`, `{{links}}`, `{{experience}}`, `{{education}}`,
+   `{{skills}}`. Hard-coded personal data must be replaced by them; a
+   `{{summary}}` section has no placeholder, so fold it into `{{headline}}` or drop it.
+2. **`\usepackage` is allowlisted** (`ALLOWED_LATEX_PACKAGES` in
+   `backend/src/latex/latex-template.ts`). Typography/layout packages are fine;
+   `shellesc`, `filecontents`, `fontspec` and anything else return **400**
+   "Template may not load the LaTeX package ...".
+3. **Remove `\input{glyphtounicode}`** (and `\pdfgentounicode`): the file is not in
+   any Debian TeX Live package, and it only affects PDF text extraction, not the
+   rendering. `\input` stays blocked anyway because it is a file-read primitive.
+
+Packages the sandbox image provides: `texlive-latex-base`, `-recommended`,
+`-extra` (titlesec, enumitem, fullpage) and `-fonts-recommended`, plus
+`poppler-utils`. After changing `worker/Dockerfile`, rebuild (§13) or the new
+packages will not be found and the template fails with **422**.
+
+4. **A placeholder replaces the whole `{{...}}`, braces included.** If the
+   placeholder sits directly inside another group or straight after a macro
+   name, that group's braces disappear and the compile dies with
+   "Undefined control sequence". Put a space on each side:
+
+   ```latex
+   \resumeItem{ {{experience}} }        % NOT \resumeItem{{experience}}
+   \underline{ {{email}} }              % NOT \underline{{email}}
+   ```
+
+   `\newcommand{\resumeItem}[1]{\item{{#1}}}` needs no change: `{{#1}}` is a
+   macro parameter, not a placeholder, so it is left untouched.
+
+5. **Comments are inert, so placeholders in them are ignored.** TeX discards
+   everything from `%` to the end of the line, so a header comment listing the
+   placeholders is safe and is *not* substituted. This matters because a
+   multi-line value substituted into a comment would end that comment line and
+   dump the rest of the value into the preamble, which fails with "Missing
+   `\begin{document}`". For the same reason a blocked primitive or package named
+   in a comment does not reject the template. `\%` is a literal percent, not a
+   comment start, so a placeholder after `\%` still substitutes.
+
+6. **Multi-line fields need `\obeylines` to become separate lines.** A newline
+   in a field value is just a space to LaTeX, so without it a three-line
+   Experience renders as one run-on bullet. Wrap the placeholder:
+
+   ```latex
+   {\obeylines
+   \begin{itemize}[leftmargin=0.24in, label={}]
+     \item {{experience}}
+   \end{itemize}
+   }
+   ```
+
+   Then one line per entry in the form becomes one line on the CV. Verified with
+   `pdftotext` in the sandbox: three lines in, three lines out.
+
+A ready-to-use version of the Word-mirroring template above is committed at
+`docs/templates/resume-blue-accent.tex` — it applies all six rules, including
+`\obeylines` on every multi-line section. Reference source:
+`docs/TESTING_GUIDE.md` §12 (template authoring).
+
+---
+
+## 13. MVP3 — Phase 4: Sandboxed LaTeX compilation
+
+### Enable it (opt-in; the default stack has no Docker socket in the API)
+
+```bash
+# 1. Build the sandbox image once (texlive, non-root uid 10001, pdflatex entrypoint,
+#    poppler-utils for the Phase 6 preview). Re-run this after pulling Phase 6:
+#    an image built before it lacks pdftoppm and every preview returns 422 with
+#    "The template could not be compiled." while final PDF builds still succeed.
+docker build -t jobtracker/latex-worker:latest worker/
+
+# 2. Restart the API with the socket overlay
+#    (adds /var/run/docker.sock + LATEX_* env; nothing else changes)
+docker compose -f docker-compose.yml -f docker-compose.latex.yml up -d backend
+docker compose logs -f backend | grep -i latex      # sandbox warnings only
+```
+
+Without the overlay, `POST /api/cvs/build` answers **503** "PDF generation is not
+available on this server right now" and nothing else changes.
+
+Env (all optional, see `backend/.env.example`):
+`DOCKER_SOCKET=/var/run/docker.sock`, `LATEX_WORKER_IMAGE=jobtracker/latex-worker:latest`,
+`LATEX_COMPILE_TIMEOUT_MS=15000`.
+
+### Build a PDF
+
+```bash
+TOKEN=<user accessToken>
+TPL=<active template id from GET /api/admin/cv-templates>
+
+curl -X POST http://localhost:3000/api/cvs/build -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"template_id":"'"$TPL"'","fields":{"fullName":"Ada Lovelace","headline":"Engineer & Analyst_100%","email":"ada@example.com"}}'
+# → {"id":"<uuid>","status":"queued",...}
+
+curl http://localhost:3000/api/cvs/build/<id> -H "Authorization: Bearer $TOKEN"
+# poll: queued → compiling → ready | failed
+curl -o out.pdf http://localhost:3000/api/cvs/build/<id>/file -H "Authorization: Bearer $TOKEN"
+curl -X DELETE http://localhost:3000/api/cvs/build/<id> -H "Authorization: Bearer $TOKEN"
+```
+
+### Rejections and edge cases (all must fail safely)
+
+```bash
+-d '{"template_id":"not-a-uuid"}'                  # 400
+-d '{"template_id":"'"$TPL"'","fields":{"evil":"x"}}' # 400 unknown placeholder
+-d '{"template_id":"'"$TPL"'","fields":{"fullName":"x".repeat(500)}}' # 400 too long
+# inactive/unknown template_id                     # 404
+# another user's build id (GET /file, DELETE)      # 404, never a download
+# 11th build within the hour from one IP           # 429 (@Throttle 10/h, separate from AI cap)
+```
+
+Sandbox behaviour to confirm:
+
+```bash
+docker ps -a --filter name=jobtracker-latex            # empty: every job container is removed
+docker run --rm jobtracker/latex-worker:latest --help 2>/dev/null | head -2   # pdflatex flags baked in
+```
+
+- **Escaping**: build with `fullName = "A_B & \input{/etc/passwd}"`. The build must
+  still succeed and the PDF must show the literal text — unescaped `_`/`&` would
+  abort `pdflatex`, so a successful build is the proof that escaping ran.
+- **Timeout**: set `LATEX_COMPILE_TIMEOUT_MS=1000` and build a template with a huge
+  `experience` blob → `status=failed` with "Compilation took too long…" and the
+  container force-removed.
+- **Broken template**: `POST /api/admin/cv-templates` with valid syntax but a
+  missing package (e.g. `\includegraphics{logo}`) → `failed` with "The template
+  could not be compiled." No `pdflatex` log, no host path in the message.
+- **Isolation**: the sandbox runs with `--network none`, all capabilities dropped,
+  `no-new-privileges`, uid `10001`, tmpfs-only scratch space and no host mounts —
+  files travel through the Docker archive API, so nothing on the host is readable
+  from inside the job.
+
+### Automated checks
+
+```bash
+cd backend
+npx jest src/latex                       # unit tests (no Docker needed)
+LATEX_INTEGRATION=1 npx jest src/latex   # + real containers (needs the image)
+# Windows/Docker Desktop: $env:DOCKER_SOCKET='\\.\pipe\docker_engine'
+```
+
+---
+
+## 14. MVP3 — Phase 5: CV Builder UI & generation flow
+
+### Prerequisites
+
+Phase 4 must be enabled (§13) — the builder is the only user of the sandbox.
+An active template (Phase 3) must exist; without one the gallery says
+"No templates available".
+
+### Walkthrough (browser)
+
+1. `/cv-builder` (also linked from the sidebar and from **My CVs** → *Build a CV*).
+2. The gallery lists active templates with their `preview_image_url`. Pick one.
+3. The form is pre-filled from the account (`name`, `email`), the profile
+   (`headline`, `skills`) and, if selected under **Pre-fill from**, a saved CV's
+   parsed content. Everything stays editable.
+4. **Generate PDF** → `queued` → `compiling` → **Download PDF**.
+5. The generated CV now appears in `/dashboard/profile/cvs` with the
+   *Built from template* badge, can be renamed / set as default / downloaded, and
+   is selectable as a job's `cv_id` (`/dashboard/jobs` → open a job → CV).
+
+```bash
+# Same flow through the API (token + active template id)
+curl http://localhost:3000/api/cv-templates -H "Authorization: Bearer $TOKEN"
+# → [{"id":"...","name":"Classic","description":...,"preview_image_url":...,"language":"en"}]
+#    (active templates only, and never their LaTeX source)
+
+curl http://localhost:3000/api/cvs -H "Authorization: Bearer $TOKEN"
+# → the generated CV appears with "source":"built"
+```
+
+### Edge and error cases
+
+| Case | Expected |
+| --- | --- |
+| No active template | Gallery shows the empty state, no *Generate PDF* |
+| Build fails (timeout / broken template) | Status card shows the server's message and *Try again*; no PDF |
+| Value over the field cap | *Generate PDF* disabled, per-field error shown |
+| Build never settles | Polling stops after ~3 min and reports "This is taking too long" |
+| 11th build in an hour from one IP | 429 (`@Throttle(10/hour)`), surfaced in the form |
+| Another user's build id | 404 on `GET /api/cvs/build/:id`, `/file` and `DELETE` |
+| Deleting a generated CV from *My CVs* | Removes the row, the build record and the PDF (both delete routes) |
+| AI parsing on a generated CV | 400 "generated from a template and has no text to parse"; the UI hides the button |
+
+Affordances that must not be silent — every one of these states a *reason*
+rather than leaving the user with a control that does nothing:
+
+| Case | Expected |
+| --- | --- |
+| No saved CVs yet | Pre-fill dropdown is empty and says so, rather than looking broken |
+| Saved CV parsed with `parse_status=partial` | Badge *Needs review* + **Try AI Parsing** banner |
+| Parsed but a section came out empty | That section is flagged as uncertain, not silently blank |
+| Uploaded PDF that yielded no sections | Badge *Plain text only*, AI parsing offered |
+| Name missing on an upload | Label is optional; the server derives one (`Name — Headline`, else `Name`, else `CV uploaded YYYY-MM-DD`) and the user can rename it |
+| **Generate PDF** clicked with no name | Disabled **and** states "Add a full name to generate your CV." |
+| Value over the field cap | Disabled **and** names the field that is too long |
+| PDF ready | *Download PDF* becomes a real link and stays visible after the click |
+| Preview pane | `Compiling…` / `Up to date` / `Error`, template name shown with a *Change template* link |
+| Experience/education entry with no dates | Inline, non-blocking *Missing dates? Add e.g. (2021 - Present)* nudge |
+
+### Automated checks
+
+```bash
+cd backend
+npx jest src/latex src/cvs     # gallery query, build→CV registration, delete cascade
+cd ../front
+npx vitest run src/app/cv-builder src/app/dashboard/profile/cvs
+```
+
+---
+
+## 15. MVP3 — Phase 6: Live split-view preview
+
+### Prerequisites
+
+Phase 4 must be enabled (§13) — the preview renders through the **same** sandbox,
+so without the Docker socket overlay the pane degrades instead of drawing:
+
+- **User builder** (`/cv-builder`): `POST /api/cvs/build/preview` answers **503**
+  and the pane keeps its last good image (or idle state) with an inline note.
+- **Admin editor** (`/admin/cv-templates`): `POST /api/admin/cv-templates/preview`
+  still returns **200** with `image: null` + a user-safe `error`, so the merged
+  source text stays visible and the editor remains usable.
+
+Extra env (all optional): `LATEX_PREVIEW_TIMEOUT_MS` (default `8000`, shorter than
+the final-build timeout) and `LATEX_PREVIEW_CACHE_TTL_MS` (default `30000`; `0`
+disables the cache).
+
+### Walkthrough (browser)
+
+1. `/cv-builder` → pick a template. Fields on the left, **Live preview** on the
+   right. Pause typing for ~0.7s → the pane shows *Rendering…* then the compiled
+   PNG. Keep typing → each pause supersedes the last request; the image updates
+   within about a second of stopping.
+2. `/admin/cv-templates` → **New template** (or *Edit*). The `.tex` source is on
+   the left, **Live preview (sample data)** on the right, rendered against the
+   fixed sample CV. The old *Preview with sample data* button is gone — preview is
+   continuous now.
+3. **Generate PDF** (user) / **Create·Save** (admin) are still separate, explicit
+   steps. The preview is ephemeral: it is never written to `generated_cvs` or to
+   permanent storage, and the admin's in-progress source is only persisted on save.
+
+```bash
+# User preview (returns a base64 PNG data URL, not a stored file)
+curl -X POST http://localhost:3000/api/cvs/build/preview \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"template_id":"'"$TPL"'","fields":{"fullName":"Ada Lovelace"}}'
+# → {"image":"data:image/png;base64,...","cached":false}   (second identical call → "cached":true)
+
+# Admin preview (accepts an in-progress latex_source; also returns merged text)
+curl -X POST http://localhost:3000/api/admin/cv-templates/preview \
+  -H "Authorization: Bearer $ADMIN" -H 'Content-Type: application/json' \
+  -d '{"latex_source":"\\documentclass{article}\\begin{document}{{fullName}}\\end{document}"}'
+# → {"placeholders":["fullName"],"latex":"Ada Lovelace","image":"data:image/png;base64,...","error":null}
+```
+
+### Edge and error cases
+
+| Case | Expected |
+| --- | --- |
+| Rapid typing (many keystrokes, no pause) | Debounce collapses them; **at most 1–2** real compiles, not one per character |
+| Newer edit while a preview is in flight | Client aborts the old request (AbortController); server **supersedes** it — the stale one is discarded with **409** and never renders a container |
+| Identical request within the TTL | Served from cache (`"cached":true`), no second compile |
+| Sandbox down / unavailable | User: **503**; Admin: **200** with `image:null` + `error`. Pane keeps the last good image and shows a note with *Try again* |
+| Compile fails (broken template) | **422** with a generic message; no `pdflatex` log or host path leaks |
+| Malicious field value (`\input{/etc/passwd}`, `\write18{whoami}`) | Neutralized **exactly** as in Phase 4 — the preview shows literal text; the injection re-run proves escaping ran on the preview path too |
+| 61st preview in a minute from one IP | **429** (`@Throttle(60/min)`, far more generous than the final-build `10/hour`) |
+| Browser tab closed mid-typing | No orphaned container: the request is aborted client-side, and the sandbox job always force-removes itself (§13) within the 8s preview timeout |
+
+Security invariants to confirm (unchanged from Phase 4 — the preview is **not** a
+separate, weaker engine): every value is escaped with the same `escapeLatex`,
+compilation happens only inside the locked-down Docker sandbox, and errors are
+generic. Per-scope concurrency is capped so one user/admin can have at most one
+preview compiling at a time.
+
+### Automated checks
+
+```bash
+cd backend
+npx jest src/latex src/admin    # compilePreview, cache + supersede, admin graceful degradation
+LATEX_INTEGRATION=1 npx jest src/latex   # + real PNG rasterization & injection-inertness
+cd ../front
+npx vitest run src/components/SplitPreviewPane.test.tsx \
+  src/app/cv-builder src/app/admin
+```
+
 ---
 
 ## Quick smoke path (5 minutes)
@@ -460,4 +819,9 @@ call and `/admin/cv-templates` redirects to `/admin/login`.
 6. Seed admin → `/admin/login` → open `users` + `audit-logs`.
 7. `/dashboard/profile/cvs` → upload a PDF → rule-based parse badge appears.
 8. Admin → `/admin/cv-templates` → create + preview + delete a template.
-9. Cleanup test users.
+9. Phase 4 (needs `docker-compose.latex.yml`): `POST /api/cvs/build` → poll to
+   `ready` → download the PDF.
+10. Phase 6: in `/cv-builder`, edit a field and pause ~1s → the right-hand pane
+    renders the compiled PNG; keep typing → it supersedes and re-renders, and no
+    container is left behind (`docker ps -a --filter name=jobtracker-latex`).
+11. Cleanup test users.

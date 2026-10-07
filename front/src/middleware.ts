@@ -13,7 +13,7 @@ export function middleware(request: NextRequest) {
   const userToken = request.cookies.get('refreshToken');
   const adminToken = request.cookies.get('adminRefreshToken');
   const path = request.nextUrl.pathname;
-  const isDashboard = path.startsWith('/dashboard');
+  const isDashboard = path.startsWith('/dashboard') || path === '/cv-builder';
   const isAdmin = path.startsWith('/admin');
   const isAdminPublic = ADMIN_PUBLIC.some((p) => path === p);
 
@@ -39,5 +39,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/admin/:path*', '/login', '/register'],
+  matcher: ['/dashboard/:path*', '/cv-builder', '/admin/:path*', '/login', '/register'],
 };

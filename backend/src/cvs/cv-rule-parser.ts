@@ -9,6 +9,7 @@ const SECTION_KEYWORDS: Record<
 > = {
   experience: [
     'experience',
+    'expériences',
     'expérience',
     'work experience',
     'professional experience',
@@ -37,6 +38,74 @@ const SECTION_KEYWORDS: Record<
   ],
 };
 
+// Words allowed to trail a section keyword: "Compétences Techniques",
+// "Expérience professionnelle", "Compétences et outils". Closed on purpose.
+// An open "starts with the keyword" rule would read a bullet like "Skills
+// developed during the role" as a header and dump the rest of the CV into the
+// wrong section, which is worse than missing a header.
+const HEADER_QUALIFIERS = new Set([
+  'technique',
+  'techniques',
+  'informatique',
+  'informatiques',
+  'professionnel',
+  'professionnelle',
+  'professionnels',
+  'professionnelles',
+  'actuel',
+  'actuelle',
+  'actuels',
+  'actuelles',
+  'acquis',
+  'acquises',
+  'et',
+  'and',
+  'outils',
+  'tools',
+]);
+
+/**
+ * Folds a header line to its match form: lowercased, accents removed, and all
+ * punctuation/extra whitespace collapsed to single spaces.
+ *
+ * Accent folding is not cosmetic for French CVs — "Compétences" and
+ * "Competences" are the same header, and plenty of CVs are typed on an
+ * ASCII-only keyboard or lose their accents in a copy-paste.
+ */
+function normalizeHeader(line: string): string {
+  return line
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+/**
+ * Matches a folded line against the keyword table, allowing a trailing
+ * qualifier. Returns the section it names, or null.
+ *
+ * The keyword table is checked entry by entry so a two-word keyword
+ * ("professional experience") is preferred over its own one-word prefix
+ * ("experience") when both could match.
+ */
+function matchSectionKey(folded: string): keyof typeof SECTION_KEYWORDS | null {
+  const words = folded.split(' ');
+  for (const [section, keywords] of Object.entries(SECTION_KEYWORDS)) {
+    for (const keyword of keywords) {
+      const keyWords = normalizeHeader(keyword).split(' ');
+      if (words.length < keyWords.length) continue;
+      const head = words.slice(0, keyWords.length).join(' ');
+      if (head !== keyWords.join(' ')) continue;
+      const rest = words.slice(keyWords.length);
+      if (rest.every((word) => HEADER_QUALIFIERS.has(word))) {
+        return section as keyof typeof SECTION_KEYWORDS;
+      }
+    }
+  }
+  return null;
+}
+
 const EMAIL_RE = /[\w.+-]+@[\w-]+\.[\w.-]+/;
 const PHONE_RE = /\+?\d[\d\s().-]{6,}\d/;
 const URL_RE = /https?:\/\/[^\s<>"')\]]+/gi;
@@ -45,6 +114,40 @@ const LINK_HOST_RE =
 const YEAR_RE = /\b(19|20)\d{2}\b/g;
 const PRESENT_RE = /\b(present|présent|actuel|current)\b/i;
 const YEAR_RANGE_ONLY_RE = /^\d{4}\s*[-–]\s*\d{4}$/;
+const BULLET_RE = /^[•\-*▪◦·]\s*/;
+// A wrapped line continues the previous one when it starts lowercase, with an
+// opening bracket, or with punctuation — shapes a real new entry never starts
+// with. Imperfect on purpose: a wrap that begins with a proper noun stays
+// split (reads fine), while the opposite mistake glues two entries together.
+const CONTINUATION_RE = /^[a-zà-öø-ÿ(«'’]/;
+
+/**
+ * Rebuilds readable lines from extracted text: PDF/Word extraction wraps
+ * paragraphs at the column edge, so one bullet arrives as two or three lines.
+ * Bullet markers open a new line, continuations are glued back with a single
+ * space, and everything else (role line, company line, category label) starts
+ * a line of its own.
+ */
+function foldWrappedLines(sectionText: string): string[] {
+  const lines: string[] = [];
+  for (const raw of sectionText.split(/\r?\n/)) {
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    const isBullet = BULLET_RE.test(trimmed);
+    // `-layout` output is column-padded, so a single field can arrive as
+    // "Anglais                    Professionnel". Collapse the run here; the
+    // CV builder would otherwise print the gap verbatim.
+    const clean = trimmed.replace(BULLET_RE, '').replace(/\s+/g, ' ').trim();
+    if (!clean) continue;
+    const prev = lines[lines.length - 1];
+    if (prev && !isBullet && CONTINUATION_RE.test(clean)) {
+      lines[lines.length - 1] = `${prev} ${clean}`;
+    } else {
+      lines.push(clean);
+    }
+  }
+  return lines;
+}
 
 export type RuleParseStatus = 'parsed' | 'partial' | 'failed';
 
@@ -135,10 +238,7 @@ export class CvRuleParserService {
   }
 
   private isSectionHeader(line: string): boolean {
-    const normalized = line.toLowerCase().replace(/[:\-–—\s]+$/, '');
-    return Object.values(SECTION_KEYWORDS)
-      .flat()
-      .some((keyword) => normalized === keyword);
+    return matchSectionKey(normalizeHeader(line)) !== null;
   }
 
   // Splits the text at section-header lines; everything after a header
@@ -151,7 +251,13 @@ export class CvRuleParserService {
       const header = this.matchHeader(line);
       if (header) {
         current = header;
-        sections[current] = '';
+        // A CV commonly has several blocks that map to the same field —
+        // "Compétences Techniques" followed by "Langues" both belong to skills.
+        // Starting from '' here would discard the first block and hand the user
+        // only the languages, so an existing section is kept and the new block
+        // appended after a blank line (the entry splitters read that break).
+        sections[current] =
+          current in sections ? `${sections[current]}\n\n` : '';
         continue;
       }
       if (current) {
@@ -164,12 +270,10 @@ export class CvRuleParserService {
   }
 
   private matchHeader(line: string): keyof Sections | null {
+    // A header is a short standalone line; the guard keeps prose out of the
+    // header matcher even when it happens to start with a keyword.
     if (line.length > 40) return null;
-    const normalized = line.toLowerCase().replace(/[:\-–—\s]+$/, '');
-    for (const [section, keywords] of Object.entries(SECTION_KEYWORDS)) {
-      if (keywords.includes(normalized)) return section as keyof Sections;
-    }
-    return null;
+    return matchSectionKey(normalizeHeader(line));
   }
 
   // Entries are separated by blank lines or bullet markers. The date range
@@ -182,6 +286,9 @@ export class CvRuleParserService {
       .slice(0, 50);
 
     return chunks.map((chunk) => {
+      // Extraction wraps paragraphs at the column edge; without folding, every
+      // wrapped fragment prints on its own line in the CV builder.
+      const text = foldWrappedLines(chunk).join('\n');
       const years = chunk.match(YEAR_RE) ?? [];
       let dateRange: string | undefined;
       if (years.length > 0) {
@@ -192,15 +299,34 @@ export class CvRuleParserService {
             : undefined;
         dateRange = end ? `${years[0]} - ${end}` : years[0];
       }
-      return { text: chunk, ...(dateRange ? { dateRange } : {}) };
+      return { text, ...(dateRange ? { dateRange } : {}) };
     });
   }
 
   private parseSkills(sectionText: string): string[] {
     const skills = sectionText
-      .split(/[,;\n|•*▪◦·]|\s+-\s+/)
-      .map((s) => s.trim())
+      // `:` is a separator because the common "-layout" layout is
+      // "Front-End : HTML, CSS" — the category label is not itself a skill.
+      .split(/[,;:\n|•*▪◦·]|\s+-\s+/)
+      // `-layout` output is column-padded, so a single field can arrive as
+      // "Anglais                    Professionnel". Collapse the run, and drop the
+      // sentence punctuation that trails the last item of a bullet, or every
+      // chip in the CV builder renders with a stray gap or full stop.
+      .map((s) => s.replace(/\s+/g, ' ').trim().replace(/[.,;:]+$/, ''))
       .filter((s) => s.length >= 1 && s.length <= 60);
-    return [...new Set(skills.map((s) => s.toLowerCase()))].slice(0, 100);
+    // Known limitation: the structured model has no separate languages field, so
+    // a "Langues" block lands in skills alongside the technologies. Dropping it
+    // would lose real content, so it is kept and left for the user to prune.
+    // Case is preserved — a CV printing "docker" instead of "Docker" reads as a
+    // typo — and only the de-duplication ignores case.
+    const seen = new Set<string>();
+    return skills
+      .filter((s) => {
+        const key = s.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 100);
   }
 }
